@@ -6,7 +6,7 @@ public sealed record CommandLineOptions(bool RunOnce, string? Directory, bool Sh
     public const string Usage = """
         Użycie: LibrusNotifier [--run-once] [--katalog <ścieżka>]
 
-          --run-once            jeden cykl sprawdzeń (ping i pełny przegląd list), potem koniec
+          --run-once            jeden cykl sprawdzeń (ping i pełny przegląd list) i należne zestawienia, potem koniec
           --katalog <ścieżka>   katalog aplikacji z plikiem librus_config.txt i katalogiem data
                                 (domyślnie katalog pliku wykonywalnego)
           --help                ta pomoc

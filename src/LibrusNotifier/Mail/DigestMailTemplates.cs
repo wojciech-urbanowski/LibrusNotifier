@@ -11,7 +11,7 @@ namespace LibrusNotifier.Mail;
 
 /// <summary>
 /// Treść maila z dziennym zestawieniem nadchodzących wydarzeń (HTML + tekst zapasowy). Pola z typem zdarzenia mają pastelowe kolory
-/// (<see cref="DigestPalette"/>); sekcja główna (dziś / jutro / pierwszy dzień nauki po wolnym) jest listą do odhaczania.
+/// (<see cref="DigestPalette"/>); sekcja główna (dziś / jutro / pierwszy dzień nauki po wolnym) jest wyróżniona w ramce.
 /// Na końcu (przed stopką) jest tabela ocen z bieżącego semestru (<see cref="GradeTable"/>), kolorowana jak oceny w mailu o nowej ocenie.
 /// </summary>
 public static class DigestMailTemplates
@@ -24,7 +24,6 @@ public static class DigestMailTemplates
     private const string TableStyle = "border-collapse:collapse;width:100%;max-width:760px;margin:0 0 8px;";
     private const string HeadCellStyle = "border:1px solid #999999;padding:4px 10px;text-align:left;vertical-align:top;font-size:12px;font-weight:600;background:rgba(128,128,128,0.15);";
     private const string CellStyle = "border:1px solid #999999;padding:6px 10px;text-align:left;vertical-align:top;word-break:break-word;";
-    private const string CheckCellStyle = "border:1px solid #999999;padding:4px 6px;width:24px;text-align:center;vertical-align:top;font-size:18px;line-height:1.2;";
     private const string MutedStyle = "color:#777777;";
     private const string PrimaryBoxStyle = "margin:0 0 8px;padding:8px 14px;border-left:6px solid #4a7dbf;background:rgba(74,125,191,0.16);max-width:740px;";
     private const string BannerStyle = "margin:0 0 16px;padding:8px 14px;border:1px solid #c9a227;background:rgba(255,200,0,0.18);max-width:740px;";
@@ -89,7 +88,7 @@ public static class DigestMailTemplates
             {
                 if (!section.Primary) text.AppendLine(DigestBuilder.DayHeading(day.Date, dates));
                 foreach (var e in day.Events)
-                    text.AppendLine(section.Primary ? $"[ ] {PlainRow(e, dates)}" : $"  - {PlainRow(e, dates)}");
+                    text.AppendLine($"  - {PlainRow(e, dates)}");
                 text.AppendLine();
             }
         }
@@ -168,7 +167,7 @@ public static class DigestMailTemplates
             {
                 if (!section.Primary)
                     html.AppendLine($"<h3 style=\"margin:14px 0 6px;font-size:14px;font-weight:600;\">{Encode(DigestBuilder.DayHeading(day.Date, dates))}</h3>");
-                AppendTable(html, day.Events, section.Primary, dates);
+                AppendTable(html, day.Events, dates);
             }
         }
 
@@ -182,10 +181,9 @@ public static class DigestMailTemplates
         return html.ToString();
     }
 
-    private static void AppendTable(StringBuilder html, IReadOnlyList<DigestEvent> events, bool checklist, DateAnnotator dates)
+    private static void AppendTable(StringBuilder html, IReadOnlyList<DigestEvent> events, DateAnnotator dates)
     {
         html.AppendLine($"<table style=\"{TableStyle}\">").AppendLine("<thead>").AppendLine("<tr>");
-        if (checklist) html.AppendLine($"<th scope=\"col\" style=\"{HeadCellStyle}width:24px;\">&nbsp;</th>");
         html.AppendLine($"<th scope=\"col\" style=\"{HeadCellStyle}width:140px;\">Typ</th>")
             .AppendLine($"<th scope=\"col\" style=\"{HeadCellStyle}width:90px;\">Lekcja</th>")
             .AppendLine($"<th scope=\"col\" style=\"{HeadCellStyle}\">Szczegóły</th>")
@@ -193,7 +191,6 @@ public static class DigestMailTemplates
         foreach (var e in events)
         {
             html.AppendLine("<tr>");
-            if (checklist) html.AppendLine($"<td style=\"{CheckCellStyle}\">&#9744;</td>");
             html.AppendLine($"<td style=\"{CellStyle}{BadgeStyle(e.Category)}\">{Encode(e.Label)}</td>")
                 .AppendLine($"<td style=\"{CellStyle}\">{LessonCell(e)}</td>")
                 .AppendLine($"<td style=\"{CellStyle}\">{DetailsCell(e, dates)}</td>")

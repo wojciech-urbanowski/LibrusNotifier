@@ -441,7 +441,7 @@ public sealed class DigestMailTemplateTests
     }
 
     [Fact]
-    public void HtmlColorsTypeFieldsAndOnlyPrimarySectionIsAChecklist()
+    public void HtmlColorsTypeFieldsAndHasNoCheckboxColumn()
     {
         var mail = Mail(DigestKind.Morning, new DateTime(2026, 11, 12, 6, 30, 0),
             Event("2026-11-12", EventCategory.Test, "Sprawdzian", "Język angielski", 2, "Unit 2", "Gubernat Julia"),
@@ -454,8 +454,9 @@ public sealed class DigestMailTemplateTests
         Assert.Contains("background:#d9c4f2;color:#1f1f1f", html);
         Assert.Contains("background:#b9e4c4;color:#1f1f1f", html);
         Assert.Contains("background:#fad0cc;color:#1f1f1f", html);
-        // Pola do odhaczenia tylko przy dwóch wydarzeniach z sekcji „Dzisiaj”.
-        Assert.Equal(2, html.Split("&#9744;").Length - 1);
+        // Brak kolumny z polem do odhaczenia; tabele mają trzy kolumny (Typ, Lekcja, Szczegóły).
+        Assert.DoesNotContain("&#9744;", html);
+        Assert.Equal(3 * (html.Split("<thead>").Length - 1), html.Split("<th ").Length - 1);
         Assert.Contains("Dzisiaj", html);
         Assert.Contains("Kolejne wydarzenia", html);
         Assert.Contains("Piątek, 13.11.2026 (jutro)", html);
@@ -485,7 +486,7 @@ public sealed class DigestMailTemplateTests
     }
 
     [Fact]
-    public void MorningSubjectAndTextListTodayAsChecklist()
+    public void MorningSubjectAndTextListTodayFirst()
     {
         var mail = Mail(DigestKind.Morning, new DateTime(2026, 11, 12, 6, 30, 0),
             Event("2026-11-12", EventCategory.Test, "Sprawdzian", "Język angielski", 2),
@@ -493,7 +494,8 @@ public sealed class DigestMailTemplateTests
             Event("2026-11-13", EventCategory.Quiz, "Kartkówka", "Fizyka", 4));
 
         Assert.Equal("[Librus] Zdarzenia na dziś, czwartek 2026-11-12: 2 (sprawdzian, zastępstwo); kolejne: 1", mail.Subject);
-        Assert.Contains("[ ] Sprawdzian · lekcja 2 · Język angielski", mail.Body);
+        Assert.Contains("  - Sprawdzian · lekcja 2 · Język angielski", mail.Body);
+        Assert.DoesNotContain("[ ]", mail.Body);
         Assert.Contains("  - Kartkówka · lekcja 4 · Fizyka", mail.Body);
         Assert.Contains("Piątek, 13.11.2026 (jutro)", mail.Body);
         Assert.True(mail.Body.IndexOf("DZISIAJ", StringComparison.Ordinal) < mail.Body.IndexOf("KOLEJNE WYDARZENIA", StringComparison.Ordinal));
