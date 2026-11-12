@@ -67,7 +67,9 @@ schtasks /Create /TN "LibrusNotifier" /SC DAILY /ST 00:05 /TR "C:\LibrusNotifier
   gdy da się ją ustalić). Szczegóły w sekcji 6 specyfikacji.
 - Zestawienia dzienne (sekcja 8 specyfikacji): o 6:30 w dni nauki lista „Dzisiaj” i kolejnych wydarzeń, o 15:00 lista „Jutro”
   (albo pierwszego dnia nauki po wolnym) i kolejnych; w wakacje i ferie popołudniowe tylko wtedy, gdy są przyszłe
-  wydarzenia. Powstają wyłącznie z danych w bazie, bez żądań do Librusa. Rodzaje wydarzeń mają pastelowe kolory
+  wydarzenia. Powstają wyłącznie z danych w bazie, bez żądań do Librusa, i zawsze po pingu: ping w toku jest dokańczany
+  (oba konta), a zestawienie zaległe po starcie aplikacji (także w nowej bazie) wychodzi po pierwszym pingu; po 15:00,
+  gdy dziś nic jeszcze nie wysłano, wychodzi tylko popołudniowe. Rodzaje wydarzeń mają pastelowe kolory
   (sprawdzian – czerwony mocniejszy, kartkówka – czerwony lżejszy, zadanie domowe – fioletowy, zastępstwo – zielony,
   odwołane zajęcia – pomarańczowy, dzień wolny – niebieski, wydarzenie – żółty, inne – szary). Na końcu zestawienia jest
   tabela ocen z bieżącego semestru: wiersze to przedmioty (alfabetycznie), kolumny to oceny (same wartości,

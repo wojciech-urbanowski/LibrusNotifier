@@ -109,6 +109,10 @@ internal sealed class FakeGateway(AccountKind account) : IAccountGateway
     public Dictionary<ModuleKind, List<ObservedItem>> Lists { get; } = KindNames.AllModules.ToDictionary(m => m, _ => new List<ObservedItem>());
     public PanelCounters Counters { get; set; } = PanelCounters.Empty;
     public Exception? LoginError { get; set; }
+
+    /// <summary>Wywoływane na początku logowania, czyli na początku sprawdzania konta w pingu (np. do zapisu kolejności zdarzeń).</summary>
+    public Action? OnLogin { get; set; }
+
     public Dictionary<ModuleKind, Exception> FetchErrors { get; } = [];
     public Queue<PanelCounters?> EnsureResults { get; } = new();
     public List<ModuleKind> Fetched { get; } = [];
@@ -119,6 +123,7 @@ internal sealed class FakeGateway(AccountKind account) : IAccountGateway
     public Task<PanelCounters> LoginAsync(CancellationToken cancellationToken)
     {
         Logins++;
+        OnLogin?.Invoke();
         if (LoginError is not null) throw LoginError;
         return Task.FromResult(Counters);
     }

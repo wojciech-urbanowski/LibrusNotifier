@@ -555,7 +555,27 @@ public sealed class DigestServiceTests : IDisposable
     private readonly FakeMailSender _mail = new();
     private readonly ListLog _log = new();
 
+    /// <summary>Baza jak po udanych pingach: terminarz obu kont był już pobrany (inaczej zestawienie czeka na pierwsze dane).</summary>
+    public DigestServiceTests() => MarkScheduleFetched();
+
     public void Dispose() => _db.Dispose();
+
+    private void MarkScheduleFetched()
+    {
+        var fetched = new DateTime(2026, 11, 12, 4, 0, 0, DateTimeKind.Utc);
+        using var db = _db.Create();
+        foreach (var account in new[] { AccountKind.Parent, AccountKind.Student })
+            db.Baselines.Add(new BaselineEntity { Account = account, Module = ModuleKind.Schedule, CompletedUtc = fetched, LastFetchUtc = fetched });
+        db.SaveChanges();
+    }
+
+    /// <summary>Baza jak świeżo założona: bez zestawień w <c>DigestLogs</c> i bez żadnego pobrania list.</summary>
+    private void ForgetFetches()
+    {
+        using var db = _db.Create();
+        db.Baselines.RemoveRange(db.Baselines);
+        db.SaveChanges();
+    }
 
     private (DigestService Service, FakeClock Clock, AdminReporter Admin, DailyStats Stats) Create(DateTime now, bool studentRecipients = true)
     {
@@ -770,31 +790,102 @@ public sealed class DigestServiceTests : IDisposable
         Assert.Equal(4, _mail.Sent.Count);
     }
 
-    [Fact]
-    public async Task DigestMissedByMoreThanMaxLatenessIsSkipped()
+    [Theory]
+    [InlineData(8, 31)] // poranne wychodzi bez względu na opóźnienie, dopóki nie nadejdzie pora popołudniowego
+    [InlineData(11, 0)]
+    [InlineData(14, 59)]
+    public async Task MorningDigestNotSentYetGoesOutLateAtStartButOnlyBeforeAfternoonTime(int hour, int minute)
     {
         Seed(UpcomingTest());
-        var (service, clock, _, _) = Create(new DateTime(2026, 11, 12, 8, 31, 0)); // poranne było na 6:30, minęły ponad 2 h
+        var (service, clock, _, _) = Create(new DateTime(2026, 11, 12, hour, minute, 0));
 
         await service.RunDueAsync(CancellationToken.None);
 
-        Assert.Empty(_mail.Sent);
-        Assert.Contains(_log.Messages(LogLevel.Info), m => m.Contains("pominięte") && m.Contains("poranne"));
+        Assert.StartsWith("[Librus] Zdarzenia na dziś, czwartek 2026-11-12", Assert.Single(Digests(Parent)).Subject);
+        Assert.Single(Digests(Student));
 
+        // O 15:00 wychodzi jeszcze popołudniowe (osobny termin), poranne już nie wraca.
         clock.SetLocal(new DateTime(2026, 11, 12, 15, 0, 0));
         await service.RunDueAsync(CancellationToken.None);
-        Assert.Equal(2, _mail.Sent.Count);
+        await service.RunDueAsync(CancellationToken.None);
+        Assert.Equal(2, Digests(Parent).Count);
+        Assert.StartsWith("[Librus] Zdarzenia na jutro", Digests(Parent)[1].Subject);
+    }
+
+    [Theory]
+    [InlineData(15, 0)]
+    [InlineData(17, 30)] // popołudniowe wychodzi do końca dnia
+    [InlineData(23, 50)]
+    public async Task WhenNeitherDigestWasSentTodayAndItIsPastAfternoonTimeOnlyAfternoonGoesOut(int hour, int minute)
+    {
+        Seed(UpcomingTest());
+        var (service, _, _, _) = Create(new DateTime(2026, 11, 12, hour, minute, 0));
+
+        await service.RunDueAsync(CancellationToken.None);
+        await service.RunDueAsync(CancellationToken.None);
+
+        Assert.StartsWith("[Librus] Zdarzenia na jutro, piątek 2026-11-13", Assert.Single(Digests(Parent)).Subject);
+        Assert.StartsWith("[Librus] Zdarzenia na jutro, piątek 2026-11-13", Assert.Single(Digests(Student)).Subject);
+        Assert.DoesNotContain(_mail.Sent, m => m.Subject.Contains("na dziś"));
+        Assert.Contains(_log.Messages(LogLevel.Info), m => m.Contains("pominięte") && m.Contains("poranne") && m.Contains("popołudniowe"));
+        using var db = _db.Create();
+        Assert.Equal([DigestKind.Afternoon, DigestKind.Afternoon], await db.DigestLogs.Select(d => d.Kind).ToListAsync());
     }
 
     [Fact]
-    public async Task DigestJustInsideMaxLatenessIsStillSent()
+    public async Task MorningSentEarlierIsNotSentAgainAfterRestartPastAfternoonTime()
     {
         Seed(UpcomingTest());
-        var (service, _, _, _) = Create(new DateTime(2026, 11, 12, 8, 29, 0));
+        await Create(new DateTime(2026, 11, 12, 6, 30, 0)).Service.RunDueAsync(CancellationToken.None);
+        Assert.Equal(2, _mail.Sent.Count);
+
+        // Nowy proces o 15:20: poranne było wysłane (nie jest „pominięte”), a popołudniowe wychodzi raz.
+        var (restarted, _, _, _) = Create(new DateTime(2026, 11, 12, 15, 20, 0));
+        await restarted.RunDueAsync(CancellationToken.None);
+
+        Assert.Equal(4, _mail.Sent.Count);
+        Assert.Equal(["na dziś", "na jutro"], Digests(Parent).Select(m => m.Subject.Contains("na dziś") ? "na dziś" : "na jutro"));
+        Assert.DoesNotContain(_log.Messages(LogLevel.Info), m => m.Contains("pominięte"));
+    }
+
+    [Fact]
+    public async Task FreshDatabaseSendsDueDigestAsSoonAsScheduleHasBeenFetched()
+    {
+        ForgetFetches(); // nowa baza: pusty DigestLogs i żadnych pobrań
+        var (service, clock, _, _) = Create(new DateTime(2026, 11, 12, 15, 30, 0));
+
+        // Przed pierwszym pobraniem terminarza nie ma czego obwieszczać: „brak zdarzeń” byłoby nieprawdą.
+        await service.RunDueAsync(CancellationToken.None);
+        await service.RunDueAsync(CancellationToken.None);
+        Assert.Empty(_mail.Sent);
+        Assert.Single(_log.Messages(LogLevel.Info), m => m.Contains("czeka") && m.Contains("rodzic"));
+        Assert.Single(_log.Messages(LogLevel.Info), m => m.Contains("czeka") && m.Contains("uczeń"));
+
+        // Pierwszy ping zapisał terminarz obu kont (pusty też się liczy): zestawienia należne od 15:00 wychodzą od razu.
+        Seed(UpcomingTest());
+        MarkScheduleFetched();
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await service.RunDueAsync(CancellationToken.None);
+
+        Assert.StartsWith("[Librus] Zdarzenia na jutro", Assert.Single(Digests(Parent)).Subject);
+        Assert.Single(Digests(Student));
+    }
+
+    [Fact]
+    public async Task StudentDigestWaitsForTheStudentAccountsFirstScheduleFetch()
+    {
+        ForgetFetches();
+        using (var db = _db.Create())
+        {
+            db.Baselines.Add(new BaselineEntity { Account = AccountKind.Parent, Module = ModuleKind.Schedule, CompletedUtc = DateTime.UtcNow, LastFetchUtc = DateTime.UtcNow });
+            db.SaveChanges();
+        }
+        var (service, _, _, _) = Create(new DateTime(2026, 11, 12, 15, 30, 0));
 
         await service.RunDueAsync(CancellationToken.None);
 
-        Assert.Equal(2, _mail.Sent.Count);
+        Assert.Single(Digests(Parent));
+        Assert.Empty(Digests(Student));
     }
 
     [Fact]
@@ -856,6 +947,138 @@ public sealed class DigestServiceTests : IDisposable
 
         Assert.Equal(2, digestTimes.Count); // rodzice i uczeń, raz
         Assert.All(digestTimes, at => Assert.Equal(new DateTime(2026, 11, 12, 6, 30, 0), at));
+    }
+
+    private DigestService DigestFor(CycleHarness h) =>
+        new(h.Mail, [CycleHarness.ParentAddress], [CycleHarness.StudentAddress], h.Db.Create, Calendar, h.Clock, h.Log, h.Admin, h.Stats);
+
+    private static PingLoop LoopFor(CycleHarness h, DayGuard guard, DigestService digest, params PollingWindow[] windows) =>
+        new(new PollingScheduler(h.Clock.Today, windows, new FixedRandom(0.5)), h.Cycle, h.Clock, guard, h.Log, h.Admin,
+            (delay, _) =>
+            {
+                h.Clock.Advance(delay);
+                return Task.CompletedTask;
+            }, digest);
+
+    private static PollingWindow Window(int fromHour, int toHour, int everyMinutes) =>
+        new("test", TimeSpan.FromHours(fromHour), TimeSpan.FromHours(toHour), TimeSpan.FromMinutes(everyMinutes), TimeSpan.Zero, JitterMode.Symmetric);
+
+    /// <summary>Zapisuje kolejność: logowanie na konta w pingu i wysyłka zestawień.</summary>
+    private static List<string> RecordOrder(CycleHarness h)
+    {
+        var order = new List<string>();
+        h.Parent.OnLogin = () => order.Add("ping:rodzic");
+        h.Student.OnLogin = () => order.Add("ping:uczeń");
+        h.Mail.Failure = mail =>
+        {
+            if (mail.Subject.StartsWith("[Librus] Zdarzenia na", StringComparison.Ordinal))
+                order.Add(mail.To.Contains(CycleHarness.ParentAddress) ? "zestawienie:rodzice" : "zestawienie:uczeń");
+            return null;
+        };
+        return order;
+    }
+
+    [Fact]
+    public async Task DigestDueDuringPingIsSentOnlyAfterBothAccountsWerePinged()
+    {
+        using var h = new CycleHarness(start: new DateTime(2026, 11, 12, 6, 20, 0));
+        var order = RecordOrder(h);
+        var slow = true;
+        var record = h.Student.OnLogin;
+        // Ping zaczęty o 6:20 trwa do 6:35: termin 6:30 wypada w trakcie sprawdzania konta ucznia.
+        h.Student.OnLogin = () =>
+        {
+            record!();
+            if (!slow) return;
+            slow = false;
+            h.Clock.Advance(TimeSpan.FromMinutes(15));
+        };
+        using var guard = new DayGuard(h.Clock, h.Clock.Today, CancellationToken.None);
+
+        await LoopFor(h, guard, DigestFor(h), Window(6, 8, 60)).RunAsync();
+
+        Assert.Equal(["ping:rodzic", "ping:uczeń", "zestawienie:rodzice", "zestawienie:uczeń", "ping:rodzic", "ping:uczeń"], order);
+    }
+
+    [Fact]
+    public async Task PingDueAtTheSameMomentAsDigestGoesFirst()
+    {
+        using var h = new CycleHarness(start: new DateTime(2026, 11, 12, 6, 0, 0));
+        var order = RecordOrder(h);
+        using var guard = new DayGuard(h.Clock, h.Clock.Today, CancellationToken.None);
+
+        // Pingi o 6:00, 6:30 (jednocześnie z terminem zestawienia), 7:00 i 7:30.
+        await LoopFor(h, guard, DigestFor(h), Window(6, 8, 30)).RunAsync();
+
+        Assert.Equal(["ping:rodzic", "ping:uczeń", "ping:rodzic", "ping:uczeń", "zestawienie:rodzice", "zestawienie:uczeń"], order.Take(6));
+        Assert.Equal(2, order.Count(e => e.StartsWith("zestawienie", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task OverdueDigestAtStartGoesOutAfterTheFirstPingAlsoOnFreshDatabase()
+    {
+        using var h = new CycleHarness(start: new DateTime(2026, 11, 12, 15, 30, 0)); // nowa baza, start po 15:00
+        h.Parent.Lists[ModuleKind.Schedule].Add(LibrusLists.FromSchedule(2026, 11, new Dictionary<int, List<LibrusApixNet.Event>>
+        {
+            [19] = [new LibrusApixNet.Event("Sprawdzian", "Fizyka", new Dictionary<string, string>(), "19", 2, "unknown", "/terminarz/sprawdzian/1")]
+        })[0]);
+        var order = RecordOrder(h);
+        using var guard = new DayGuard(h.Clock, h.Clock.Today, CancellationToken.None);
+        using (var db = h.Db.Create())
+        {
+            Assert.Empty(db.DigestLogs);
+            Assert.Empty(db.Baselines);
+        }
+
+        await LoopFor(h, guard, DigestFor(h), Window(0, 24, 360)).RunAsync();
+
+        // Najpierw pierwszy ping obu kont, dopiero potem zestawienie – z danymi, które ten ping pobrał.
+        Assert.Equal(["ping:rodzic", "ping:uczeń", "zestawienie:rodzice", "zestawienie:uczeń"], order.Take(4));
+        Assert.Equal(2, order.Count(e => e.StartsWith("zestawienie", StringComparison.Ordinal)));
+        var parent = Assert.Single(h.ParentMails, m => m.Subject.StartsWith("[Librus] Zdarzenia na", StringComparison.Ordinal));
+        Assert.StartsWith("[Librus] Zdarzenia na jutro, piątek 2026-11-13", parent.Subject);
+        Assert.Contains("Fizyka", parent.Body);
+        Assert.DoesNotContain(h.Mail.Sent, m => m.Subject.Contains("na dziś"));
+        using var after = h.Db.Create();
+        Assert.Equal(2, await after.DigestLogs.CountAsync());
+    }
+
+    [Fact]
+    public async Task OverdueDigestIsSentAtStartWhenNoPingIsLeftToday()
+    {
+        using var h = new CycleHarness(start: new DateTime(2026, 11, 14, 23, 0, 0)); // sobota po ostatnim oknie (8–22)
+        using (var db = h.Db.Create())
+        {
+            db.Elements.Add(UpcomingTest("2026-11-16"));
+            foreach (var account in new[] { AccountKind.Parent, AccountKind.Student })
+                db.Baselines.Add(new BaselineEntity
+                {
+                    Account = account, Module = ModuleKind.Schedule, CompletedUtc = new DateTime(2026, 11, 12, 4, 0, 0, DateTimeKind.Utc),
+                    LastFetchUtc = new DateTime(2026, 11, 12, 4, 0, 0, DateTimeKind.Utc)
+                });
+            db.SaveChanges();
+        }
+        using var guard = new DayGuard(h.Clock, h.Clock.Today, CancellationToken.None);
+
+        await new PingLoop(new PollingScheduler(h.Clock.Today, PollingPlan.Free, new FixedRandom(0.5)), h.Cycle, h.Clock, guard, h.Log, h.Admin,
+            digest: DigestFor(h)).RunAsync();
+
+        Assert.Equal(0, h.Parent.Logins);
+        Assert.StartsWith("[Librus] Zdarzenia na poniedziałek 2026-11-16", Assert.Single(h.ParentMails).Subject);
+        Assert.Single(h.StudentMails);
+    }
+
+    [Fact]
+    public async Task NoDigestOnFreshDatabaseWhenNoPingIsLeftToday()
+    {
+        using var h = new CycleHarness(start: new DateTime(2026, 11, 14, 23, 0, 0));
+        using var guard = new DayGuard(h.Clock, h.Clock.Today, CancellationToken.None);
+
+        await new PingLoop(new PollingScheduler(h.Clock.Today, PollingPlan.Free, new FixedRandom(0.5)), h.Cycle, h.Clock, guard, h.Log, h.Admin,
+            digest: DigestFor(h)).RunAsync();
+
+        Assert.Empty(h.Mail.Sent);
+        Assert.Contains(h.Log.Messages(LogLevel.Info), m => m.Contains("czeka") && m.Contains("nie został jeszcze pobrany"));
     }
 }
 
