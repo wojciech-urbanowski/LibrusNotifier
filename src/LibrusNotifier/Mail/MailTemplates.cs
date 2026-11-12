@@ -24,8 +24,11 @@ public static class MailTemplates
     /// <param name="kind">Rodzaj powiadomienia: nowy element, zmiana terminu (element zastąpił zniknięty) albo usunięcie.</param>
     /// <param name="related">Zmiana terminu: poprzedni element. Usunięcie: element, na który wpis prawdopodobnie przeniesiono (albo <c>null</c>).</param>
     /// <param name="detectedUtc">Kiedy wykryto zdarzenie; domyślnie pierwsze zobaczenie elementu.</param>
+    /// <param name="subjectGrades">Nowa ocena: oceny z tego samego przedmiotu do raportu pod treścią (<see cref="GradeHistory.ForSubject"/>);
+    /// bez nich mail nie ma raportu.</param>
     public static OutgoingMail ForElement(ElementEntity element, IReadOnlyList<string> to, Clock clock, SchoolCalendar? calendar = null,
-        NotificationKind kind = NotificationKind.New, ElementEntity? related = null, DateTime? detectedUtc = null)
+        NotificationKind kind = NotificationKind.New, ElementEntity? related = null, DateTime? detectedUtc = null,
+        IReadOnlyList<ElementEntity>? subjectGrades = null)
     {
         var elementFields = FieldJson.Deserialize(element.DataJson);
         var details = FieldJson.Deserialize(element.DetailsJson);
@@ -40,7 +43,10 @@ public static class MailTemplates
             NotificationKind.Removed => RemovedParts(element, related, F),
             _ => NewParts(element, F)
         });
-        return Build(element, to, dates, clock, fields, details, subject, kind, detectedUtc);
+        var report = element.Type == ElementTypes.Grade && kind == NotificationKind.New && subjectGrades is not null
+            ? GradeReport.Build(element, subjectGrades)
+            : null;
+        return Build(element, to, dates, clock, fields, details, subject, kind, detectedUtc, report);
     }
 
     private static IEnumerable<string> NewParts(ElementEntity element, Func<string, string> F) =>
@@ -60,7 +66,7 @@ public static class MailTemplates
         };
 
     private static OutgoingMail Build(ElementEntity element, IReadOnlyList<string> to, DateAnnotator dates, Clock clock, IReadOnlyList<Field> fields,
-        IReadOnlyList<Field> details, string subject, NotificationKind kind, DateTime? detectedUtc)
+        IReadOnlyList<Field> details, string subject, NotificationKind kind, DateTime? detectedUtc, GradeReport? report)
     {
         var extra = details.Where(d => !fields.Any(f => f.Label == d.Label && f.Value == d.Value)).ToList();
         var note = extra.Count == 0 && element.Type is ElementTypes.Message && element.DetailsJson is null
@@ -82,6 +88,7 @@ public static class MailTemplates
         {
             body.AppendLine().AppendLine(note);
         }
+        if (report is not null) AppendReportText(body, report);
         body.AppendLine()
             .AppendLine($"Widoczne na koncie: {visibility}")
             .AppendLine($"Wykryto: {detected}")
@@ -91,7 +98,8 @@ public static class MailTemplates
 
         // Opisy dat wchodzą do tematu przed ewentualnym skróceniem, które dotyka tekstu przed datą, a nie opisu.
         var subjectLine = CleanSubject(dates.PlainFitting(NormalizeSubject(subject), MaxSubjectLength));
-        return new OutgoingMail(to, subjectLine, body.ToString(), BuildHtml(subjectLine, typeName, fields, extra, note, visibility, detected, dates));
+        return new OutgoingMail(to, subjectLine, body.ToString(),
+            BuildHtml(subjectLine, typeName, fields, extra, note, visibility, detected, dates, MarkStyleFor(element.Type), report));
     }
 
     /// <summary>Pola na początku maila o zmianie terminu lub usunięciu (przed polami samego elementu).</summary>
@@ -190,7 +198,7 @@ public static class MailTemplates
     /// jedyne znaczniki, jakie dodajemy w wartościach, to <c>&lt;strong&gt;</c> wokół dat „na teraz” (dziś, jutro, pierwszy dzień po wolnym).
     /// </summary>
     private static string BuildHtml(string title, string typeName, IReadOnlyList<Field> fields, IReadOnlyList<Field> extra, string? note,
-        string visibility, string detected, DateAnnotator dates)
+        string visibility, string detected, DateAnnotator dates, Func<string, string>? markStyle, GradeReport? report)
     {
         var html = new StringBuilder();
         html.AppendLine("<!DOCTYPE html>")
@@ -204,9 +212,10 @@ public static class MailTemplates
             .AppendLine("</head>")
             .AppendLine($"<body style=\"{PageStyle}\">")
             .AppendLine($"<h1 style=\"{HeadingStyle}\">{Encode(typeName)}</h1>");
-        AppendFieldTable(html, fields, dates);
+        AppendFieldTable(html, fields, dates, markStyle);
         AppendFieldTable(html, extra, dates);
         if (note is not null) html.AppendLine($"<p><em>{Encode(note)}</em></p>");
+        if (report is not null) AppendReportHtml(html, report);
         html.AppendLine($"<table style=\"{MetaTableStyle}\">")
             .AppendLine("<tbody>")
             .AppendLine($"<tr><th scope=\"row\" style=\"{MetaCellStyle}font-weight:normal;\">Widoczne na koncie</th><td style=\"{MetaCellStyle}\">{Encode(visibility)}</td></tr>")
@@ -219,7 +228,15 @@ public static class MailTemplates
         return html.ToString();
     }
 
-    private static void AppendFieldTable(StringBuilder html, IReadOnlyList<Field> fields, DateAnnotator dates)
+    /// <summary>Styl pola „Ocena” w mailu o ocenie: kolor wg skali (ocena) albo szary (ocena opisowa); inne typy nie mają koloru.</summary>
+    private static Func<string, string>? MarkStyleFor(string type) => type switch
+    {
+        ElementTypes.Grade => mark => GradePalette.CellStyle(mark),
+        ElementTypes.DescriptiveGrade => mark => GradePalette.CellStyle(mark, descriptive: true),
+        _ => null
+    };
+
+    private static void AppendFieldTable(StringBuilder html, IReadOnlyList<Field> fields, DateAnnotator dates, Func<string, string>? markStyle = null)
     {
         if (fields.Count == 0) return;
         html.AppendLine($"<table style=\"{TableStyle}\">").AppendLine("<tbody>");
@@ -228,11 +245,61 @@ public static class MailTemplates
             // Data techniczna (kiedy wpis dodano) jest szara i bez opisu, żeby nie mylić jej z datą, której dotyczy powiadomienie.
             var technical = TechnicalDateLabels.Contains(field.Label);
             var value = technical ? EncodeMultiline(field.Value) : dates.Html(field.Value);
-            var color = technical ? TechnicalColorStyle : "";
-            html.AppendLine($"<tr><th scope=\"row\" style=\"{LabelCellStyle}{color}\">{Encode(field.Label)}</th><td style=\"{ValueCellStyle}{color}\">{value}</td></tr>");
+            // Szara jest też waga: cyfra obok oceny łatwo się z nią myli. Etykieta i wartość są szare jak „Data dodania”.
+            var muted = technical || field.Label == WeightLabel;
+            var color = muted ? TechnicalColorStyle : markStyle is not null && field.Label == GradeLabel ? markStyle(field.Value) : "";
+            html.AppendLine($"<tr><th scope=\"row\" style=\"{LabelCellStyle}{(muted ? color : "")}\">{Encode(field.Label)}</th><td style=\"{ValueCellStyle}{color}\">{value}</td></tr>");
         }
         html.AppendLine("</tbody>").AppendLine("</table>");
     }
+
+    private const string GradeLabel = "Ocena";
+    private const string WeightLabel = "Waga";
+    private const string ReportHeadingStyle = "margin:20px 0 8px;font-size:15px;font-weight:600;";
+    private const string ReportHeadCellStyle = "border:1px solid #999999;padding:4px 10px;text-align:left;vertical-align:top;font-size:12px;font-weight:600;background:rgba(128,128,128,0.15);";
+
+    /// <summary>Raport ocen z przedmiotu pod treścią: najnowsza na górze, ocena, której dotyczy mail, jest pogrubiona i oznaczona jako nowa.</summary>
+    private static void AppendReportHtml(StringBuilder html, GradeReport report)
+    {
+        html.AppendLine($"<h2 style=\"{ReportHeadingStyle}\">{Encode(ReportTitle(report))}</h2>")
+            .AppendLine($"<table style=\"{TableStyle}\">")
+            .AppendLine("<thead>")
+            .AppendLine("<tr>" + string.Concat(new[] { "Data", "Ocena", "Kategoria", WeightLabel }
+                .Select(h => $"<th scope=\"col\" style=\"{ReportHeadCellStyle}{(h == WeightLabel ? TechnicalColorStyle : "")}\">{h}</th>")) + "</tr>")
+            .AppendLine("</thead>")
+            .AppendLine("<tbody>");
+        foreach (var row in report.Rows)
+        {
+            var weight = row.Counts ? row.Weight : (row.Weight.Length == 0 ? "" : row.Weight + " ") + "(poza średnią)";
+            var bold = row.IsCurrent ? "font-weight:700;" : "";
+            var date = Encode(row.Date) + (row.IsCurrent ? " (nowa)" : "");
+            // Ocena ma ten sam kolor co w treści maila (oznaczenia spoza skali, np. „np”, są szare); puste pole jest tylko pogrubione,
+            // gdy to ocena z powiadomienia.
+            var markStyle = ValueCellStyle + (GradePalette.CellStyle(row.Mark) is { Length: > 0 } colored ? colored : bold);
+            html.AppendLine($"<tr><td style=\"{ValueCellStyle}white-space:nowrap;{bold}\">{date}</td>" +
+                            $"<td style=\"{markStyle}\">{Encode(row.Mark)}</td>" +
+                            $"<td style=\"{ValueCellStyle}{bold}\">{Encode(row.Category)}</td>" +
+                            $"<td style=\"{ValueCellStyle}{TechnicalColorStyle}\">{Encode(weight)}</td></tr>"); // waga szara i niepogrubiona
+        }
+        html.AppendLine("</tbody>").AppendLine("</table>");
+    }
+
+    private static void AppendReportText(StringBuilder body, GradeReport report)
+    {
+        body.AppendLine().AppendLine(ReportTitle(report) + ":");
+        foreach (var row in report.Rows)
+        {
+            var details = string.Join(", ", new[]
+            {
+                row.Category,
+                row.Weight.Length == 0 ? "" : $"waga {row.Weight}",
+                row.Counts ? "" : "poza średnią"
+            }.Where(p => p.Length > 0));
+            body.AppendLine($"{row.Date}  {row.Mark,-3}  {details}{(row.IsCurrent ? " (nowa)" : "")}".TrimEnd());
+        }
+    }
+
+    private static string ReportTitle(GradeReport report) => $"Oceny z przedmiotu {report.Subject} (od najnowszej)";
 
     private static string Encode(string text) => WebUtility.HtmlEncode(text);
 

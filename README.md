@@ -94,6 +94,16 @@ kolejne numery wystąpienia.
 Mail ma temat z prefiksem `[Librus]` opisujący element (np. `[Librus] Nowa ocena: Matematyka – 5`), a w treści
 wszystkie pola, szczegóły i informację, na którym koncie element jest widoczny.
 
+Mail o nowej ocenie ma dodatkowo:
+
+- pastelowe tło pola z oceną (6 – intensywny zielony, 5 – zielony, 4 – słaby zielony, 3 – żółty, 2 – pomarańczowy,
+  1 – czerwony; sam „+” – miętowy odcień zieleni, sam „-” – łososiowy, pomiędzy pomarańczowym a czerwonym; „4+” i „3-”
+  mają kolor swojej cyfry; inne oznaczenia, np. „nb”, „np”, „zw”, i oceny opisowe są szare; waga ma szarą czcionkę, żeby
+  nie myliła się z oceną),
+- raport z listą wszystkich ocen z tego przedmiotu, od najnowszej do najstarszej (ocena z powiadomienia jest oznaczona
+  „(nowa)”). Raport powstaje z bazy; oceny, które zniknęły z listy w Librusie (np. poprawione), są pomijane, a uczeń widzi
+  w nim tylko oceny ze swojego konta.
+
 ### Szczegóły implementacji
 
 - Pierwsze pobranie listy danego modułu z danego konta zapisuje dane bez powiadomień (tabela `Baselines`). Obejmuje to

@@ -60,6 +60,76 @@ public sealed class NotifierCycleTests
     }
 
     [Fact]
+    public async Task NewGradeMailListsTheSubjectGradesNewestFirstWithoutOtherSubjects()
+    {
+        using var h = new CycleHarness();
+        foreach (var grade in new[] { Items.Grade("Matematyka", "4", "2026-10-01"), Items.Grade("Matematyka", "3", "2026-11-05"), Items.Grade("Fizyka", "5", "2026-11-06") })
+        {
+            h.Parent.Lists[ModuleKind.Grades].Add(grade);
+            h.Student.Lists[ModuleKind.Grades].Add(grade);
+        }
+        await h.BaselineAsync();
+        h.Clock.Advance(TimeSpan.FromMinutes(5));
+        var added = Items.Grade("Matematyka", "5", "2026-11-12");
+        h.Parent.Lists[ModuleKind.Grades].Add(added);
+        h.Student.Lists[ModuleKind.Grades].Add(added);
+        h.Parent.Counters = h.Student.Counters = PanelCounters.Of((ModuleKind.Grades, 1));
+
+        await h.PingAsync();
+
+        foreach (var mail in new[] { Assert.Single(h.ParentMails), Assert.Single(h.StudentMails) })
+        {
+            var html = mail.HtmlBody!;
+            var report = html[html.IndexOf("<h2", StringComparison.Ordinal)..];
+            Assert.Contains("Oceny z przedmiotu Matematyka (od najnowszej)", report);
+            Assert.Matches(@"2026-11-12 \(nowa\).*2026-11-05.*2026-10-01", report.Replace("\r", "").Replace("\n", ""));
+            Assert.DoesNotContain("2026-11-06", report); // piątka z fizyki
+            Assert.Matches(@"(?s)2026-11-12\s+5\s.*\(nowa\).*2026-11-05\s+3\s.*2026-10-01\s+4\s", mail.Body);
+            Assert.DoesNotContain("Fizyka", mail.Body.Split("Oceny z przedmiotu")[1]);
+        }
+    }
+
+    [Fact]
+    public async Task CorrectedGradeDisappearsFromTheReportOfTheNewGrade()
+    {
+        using var h = new CycleHarness();
+        h.Parent.Lists[ModuleKind.Grades].Add(Items.Grade("Historia", "3", "2026-11-10"));
+        h.Parent.Lists[ModuleKind.Grades].Add(Items.Grade("Historia", "5", "2026-10-02"));
+        await h.BaselineAsync();
+        h.Clock.Advance(TimeSpan.FromMinutes(5));
+        // Nauczyciel poprawił trójkę na czwórkę: w Librusie zostaje jedna ocena z tego dnia.
+        h.Parent.Lists[ModuleKind.Grades].RemoveAll(i => i.Fields.Any(f => f is { Label: "Ocena", Value: "3" }));
+        h.Parent.Lists[ModuleKind.Grades].Add(Items.Grade("Historia", "4", "2026-11-10"));
+        h.Parent.Counters = PanelCounters.Of((ModuleKind.Grades, 1));
+
+        await h.PingAsync();
+
+        var mail = Assert.Single(h.ParentMails);
+        var report = mail.Body[mail.Body.IndexOf("Oceny z przedmiotu", StringComparison.Ordinal)..];
+        Assert.Matches(@"(?s)2026-11-10\s+4\s.*\(nowa\).*2026-10-02\s+5\s", report);
+        Assert.DoesNotMatch(@"2026-11-10\s+3\s", report); // stara trójka zniknęła z listy w Librusie
+        Assert.Equal(2, report.Split('\n', StringSplitOptions.RemoveEmptyEntries).Count(l => l.StartsWith("2026-", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task StudentReportDoesNotContainGradesVisibleOnlyOnTheParentAccount()
+    {
+        using var h = new CycleHarness();
+        h.Parent.Lists[ModuleKind.Grades].Add(Items.Grade("Chemia", "2", "2026-10-01")); // tylko u rodzica
+        await h.BaselineAsync();
+        h.Clock.Advance(TimeSpan.FromMinutes(5));
+        var added = Items.Grade("Chemia", "4", "2026-11-12");
+        h.Parent.Lists[ModuleKind.Grades].Add(added);
+        h.Student.Lists[ModuleKind.Grades].Add(added);
+        h.Parent.Counters = h.Student.Counters = PanelCounters.Of((ModuleKind.Grades, 1));
+
+        await h.PingAsync();
+
+        Assert.Contains("2026-10-01", Assert.Single(h.ParentMails).Body);
+        Assert.DoesNotContain("2026-10-01", Assert.Single(h.StudentMails).Body);
+    }
+
+    [Fact]
     public async Task ParentOnlyElementIsNotSentToStudent()
     {
         using var h = new CycleHarness();

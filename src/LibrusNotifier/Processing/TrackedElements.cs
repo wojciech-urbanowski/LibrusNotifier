@@ -47,10 +47,14 @@ public static class TrackedElements
     /// pobrało listę od ostatniego zobaczenia elementu: konto, które nie pobiera list (np. błąd logowania), wstrzymuje wniosek,
     /// a lista widoczna tylko na jednym koncie nie powoduje fałszywego alarmu na drugim.
     /// </summary>
-    public static bool IsGone(ElementEntity element, IReadOnlyList<BaselineEntity> baselines)
+    public static bool IsGone(ElementEntity element, IReadOnlyList<BaselineEntity> baselines) =>
+        ModuleOf(element.Type) is { } module && IsGone(element, baselines, module);
+
+    /// <summary>
+    /// To samo dla elementu z podanego modułu, także spoza <see cref="Types"/> (raport ocen: <see cref="GradeHistory"/>).
+    /// </summary>
+    public static bool IsGone(ElementEntity element, IReadOnlyList<BaselineEntity> baselines, ModuleKind module)
     {
-        var module = ModuleOf(element.Type);
-        if (module is null) return false;
         var fetches = baselines.Where(b => b.Module == module && element.IsVisibleTo(b.Account)).Select(b => b.LastFetchUtc).ToList();
         return fetches.Count > 0 && element.LastSeenUtc < fetches.Min();
     }
