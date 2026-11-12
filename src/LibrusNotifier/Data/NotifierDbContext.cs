@@ -11,6 +11,7 @@ public sealed class NotifierDbContext(DbContextOptions<NotifierDbContext> option
     public DbSet<ElementEntity> Elements => Set<ElementEntity>();
     public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
     public DbSet<BaselineEntity> Baselines => Set<BaselineEntity>();
+    public DbSet<DigestLogEntity> DigestLogs => Set<DigestLogEntity>();
 
     public static NotifierDbContext Create(string databaseFile)
     {
@@ -25,6 +26,8 @@ public sealed class NotifierDbContext(DbContextOptions<NotifierDbContext> option
         configurationBuilder.Properties<ModuleKind>().HaveConversion<string>().HaveMaxLength(30);
         configurationBuilder.Properties<RecipientGroup>().HaveConversion<string>().HaveMaxLength(20);
         configurationBuilder.Properties<NotificationStatus>().HaveConversion<string>().HaveMaxLength(20);
+        configurationBuilder.Properties<DigestKind>().HaveConversion<string>().HaveMaxLength(20);
+        configurationBuilder.Properties<NotificationKind>().HaveConversion<string>().HaveMaxLength(20);
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -41,13 +44,18 @@ public sealed class NotifierDbContext(DbContextOptions<NotifierDbContext> option
         modelBuilder.Entity<NotificationEntity>(notification =>
         {
             notification.ToTable("Notifications");
-            notification.HasIndex(n => new { n.ElementId, n.Group }).IsUnique();
+            notification.HasIndex(n => new { n.ElementId, n.Group, n.Kind }).IsUnique();
             notification.HasIndex(n => n.Status);
         });
         modelBuilder.Entity<BaselineEntity>(baseline =>
         {
             baseline.ToTable("Baselines");
             baseline.HasKey(b => new { b.Account, b.Module });
+        });
+        modelBuilder.Entity<DigestLogEntity>(digest =>
+        {
+            digest.ToTable("DigestLogs");
+            digest.HasIndex(d => new { d.Day, d.Kind, d.Group }).IsUnique();
         });
     }
 

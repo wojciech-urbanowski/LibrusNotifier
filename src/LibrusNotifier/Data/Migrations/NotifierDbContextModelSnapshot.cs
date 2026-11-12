@@ -30,9 +30,45 @@ namespace LibrusNotifier.Data.Migrations
                     b.Property<DateTime>("CompletedUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime>("LastFetchUtc")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Account", "Module");
 
                     b.ToTable("Baselines", (string)null);
+                });
+
+            modelBuilder.Entity("LibrusNotifier.Data.DigestLogEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("EventCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("SentUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Day", "Kind", "Group")
+                        .IsUnique();
+
+                    b.ToTable("DigestLogs", (string)null);
                 });
 
             modelBuilder.Entity("LibrusNotifier.Data.ElementEntity", b =>
@@ -49,6 +85,9 @@ namespace LibrusNotifier.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("FirstSeenUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("GoneHandledUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Key")
@@ -100,8 +139,16 @@ namespace LibrusNotifier.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("LastError")
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("RelatedElementId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("SentUtc")
                         .HasColumnType("TEXT");
@@ -115,7 +162,7 @@ namespace LibrusNotifier.Data.Migrations
 
                     b.HasIndex("Status");
 
-                    b.HasIndex("ElementId", "Group")
+                    b.HasIndex("ElementId", "Group", "Kind")
                         .IsUnique();
 
                     b.ToTable("Notifications", (string)null);

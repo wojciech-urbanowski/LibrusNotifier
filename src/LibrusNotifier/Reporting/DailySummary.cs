@@ -34,9 +34,13 @@ public static class DailySummary
         body.AppendLine(stats.NewElements.Count == 0
             ? "Nowe elementy: brak"
             : "Nowe elementy: " + string.Join(", ", stats.NewElements.OrderBy(e => e.Key, StringComparer.Ordinal).Select(e => $"{e.Key} {e.Value}")));
+        if (stats.MovedElements + stats.RemovedElements > 0)
+            body.AppendLine($"Zmiany na listach: zmiany terminu {stats.MovedElements}, usunięcia {stats.RemovedElements}");
         if (stats.BaselineElements > 0) body.AppendLine($"Zapis początkowy (bez powiadomień): {stats.BaselineElements} elementów list");
         body.AppendLine($"Wysłane powiadomienia: rodzice {stats.MailsSent.GetValueOrDefault(RecipientGroup.Parents)}, " +
             $"uczeń {stats.MailsSent.GetValueOrDefault(RecipientGroup.Student)}; nieudane próby: {stats.MailFailures}");
+        body.AppendLine($"Wysłane zestawienia wydarzeń: rodzice {stats.DigestsSent.GetValueOrDefault(RecipientGroup.Parents)}, " +
+            $"uczeń {stats.DigestsSent.GetValueOrDefault(RecipientGroup.Student)}");
         if (pendingNotifications is not null) body.AppendLine($"Oczekujące powiadomienia: {pendingNotifications}");
         body.AppendLine($"Maile do administratorów (przed podsumowaniem): {stats.AdminMails}");
         body.AppendLine();

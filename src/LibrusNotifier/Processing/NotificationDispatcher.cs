@@ -26,6 +26,12 @@ public sealed class NotificationDispatcher(IMailSender sender, IReadOnlyList<str
             .ToListAsync(cancellationToken);
         if (pending.Count == 0) return 0;
 
+        // Elementy powiązane (poprzedni termin / możliwe przeniesienie) do maili o zmianie terminu i usunięciu.
+        var relatedIds = pending.Where(n => n.RelatedElementId is not null).Select(n => n.RelatedElementId!.Value).Distinct().ToList();
+        var related = relatedIds.Count == 0
+            ? []
+            : await db.Elements.AsNoTracking().Where(e => relatedIds.Contains(e.Id)).ToDictionaryAsync(e => e.Id, cancellationToken);
+
         var attempts = 0;
         var sent = 0;
         foreach (var notification in pending)
@@ -41,7 +47,9 @@ public sealed class NotificationDispatcher(IMailSender sender, IReadOnlyList<str
             if (attempts >= MaxMailsPerCycle) break;
             attempts++;
 
-            var mail = MailTemplates.ForElement(notification.Element, recipients, clock, calendar);
+            var mail = MailTemplates.ForElement(notification.Element, recipients, clock, calendar, notification.Kind,
+                notification.RelatedElementId is { } relatedId ? related.GetValueOrDefault(relatedId) : null,
+                notification.Kind == NotificationKind.New ? null : notification.CreatedUtc);
             var group = GroupName(notification.Group);
             try
             {

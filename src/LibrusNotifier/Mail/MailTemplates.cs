@@ -21,14 +21,30 @@ public static class MailTemplates
     private static readonly HashSet<string> TechnicalDateLabels = new(StringComparer.OrdinalIgnoreCase) { "Data dodania" };
 
     /// <param name="calendar">Kalendarz szkolny do pogrubiania dat po dniach wolnych; bez niego liczą się tylko weekendy i święta.</param>
-    public static OutgoingMail ForElement(ElementEntity element, IReadOnlyList<string> to, Clock clock, SchoolCalendar? calendar = null)
+    /// <param name="kind">Rodzaj powiadomienia: nowy element, zmiana terminu (element zastąpił zniknięty) albo usunięcie.</param>
+    /// <param name="related">Zmiana terminu: poprzedni element. Usunięcie: element, na który wpis prawdopodobnie przeniesiono (albo <c>null</c>).</param>
+    /// <param name="detectedUtc">Kiedy wykryto zdarzenie; domyślnie pierwsze zobaczenie elementu.</param>
+    public static OutgoingMail ForElement(ElementEntity element, IReadOnlyList<string> to, Clock clock, SchoolCalendar? calendar = null,
+        NotificationKind kind = NotificationKind.New, ElementEntity? related = null, DateTime? detectedUtc = null)
     {
-        var fields = FieldJson.Deserialize(element.DataJson);
+        var elementFields = FieldJson.Deserialize(element.DataJson);
         var details = FieldJson.Deserialize(element.DetailsJson);
         var dates = new DateAnnotator(clock, calendar);
-        string F(string label) => fields.FirstOrDefault(f => f.Label == label)?.Value ?? "";
+        string F(string label) => elementFields.FirstOrDefault(f => f.Label == label)?.Value ?? "";
+        if (kind == NotificationKind.Moved && related is null) kind = NotificationKind.New;
+        var fields = LeadFields(element, kind, related).Concat(elementFields).ToList();
 
-        var subject = SubjectPrefix + Join(element.Type switch
+        var subject = SubjectPrefix + Join(kind switch
+        {
+            NotificationKind.Moved => MovedParts(element, related!, F),
+            NotificationKind.Removed => RemovedParts(element, related, F),
+            _ => NewParts(element, F)
+        });
+        return Build(element, to, dates, clock, fields, details, subject, kind, detectedUtc);
+    }
+
+    private static IEnumerable<string> NewParts(ElementEntity element, Func<string, string> F) =>
+        element.Type switch
         {
             ElementTypes.Grade => ["Nowa ocena: ", F("Przedmiot"), " – ", F("Ocena")],
             ElementTypes.DescriptiveGrade => ["Nowa ocena opisowa: ", F("Przedmiot"), Optional(" – ", F("Ocena"))],
@@ -41,15 +57,18 @@ public static class MailTemplates
             ElementTypes.TimetableChange => ["Zmiana w planie lekcji: ", F("Data"), Optional(", lekcja ", F("Nr lekcji")), Optional(" – ", F("Zmiana"))],
             ElementTypes.CompletedLesson => ["Zrealizowana lekcja: ", F("Przedmiot"), Optional(", ", F("Data")), Optional(", lekcja ", F("Nr lekcji"))],
             _ => ["Nowy element: ", element.Type]
-        });
+        };
 
+    private static OutgoingMail Build(ElementEntity element, IReadOnlyList<string> to, DateAnnotator dates, Clock clock, IReadOnlyList<Field> fields,
+        IReadOnlyList<Field> details, string subject, NotificationKind kind, DateTime? detectedUtc)
+    {
         var extra = details.Where(d => !fields.Any(f => f.Label == d.Label && f.Value == d.Value)).ToList();
         var note = extra.Count == 0 && element.Type is ElementTypes.Message && element.DetailsJson is null
             ? "(Treść niedostępna – sprawdź w Librusie.)"
             : null;
         var visibility = Visibility(element);
-        var detected = $"{clock.ToLocal(new DateTimeOffset(element.FirstSeenUtc, TimeSpan.Zero)):yyyy-MM-dd HH:mm}";
-        var typeName = TypeName(element.Type);
+        var detected = $"{clock.ToLocal(new DateTimeOffset(detectedUtc ?? element.FirstSeenUtc, TimeSpan.Zero)):yyyy-MM-dd HH:mm}";
+        var typeName = TypeName(element.Type, kind);
 
         var body = new StringBuilder();
         body.AppendLine(typeName).AppendLine();
@@ -74,6 +93,62 @@ public static class MailTemplates
         var subjectLine = CleanSubject(dates.PlainFitting(NormalizeSubject(subject), MaxSubjectLength));
         return new OutgoingMail(to, subjectLine, body.ToString(), BuildHtml(subjectLine, typeName, fields, extra, note, visibility, detected, dates));
     }
+
+    /// <summary>Pola na początku maila o zmianie terminu lub usunięciu (przed polami samego elementu).</summary>
+    private static IEnumerable<Field> LeadFields(ElementEntity element, NotificationKind kind, ElementEntity? related)
+    {
+        switch (kind)
+        {
+            case NotificationKind.Moved:
+                yield return new Field("Zmiana terminu", $"z {When(related!, withLesson: true)} na {When(element, withLesson: true)}");
+                break;
+            case NotificationKind.Removed:
+                yield return new Field("Status", "usunięty z Librusa (zniknął z listy)");
+                if (related is not null) yield return new Field("Możliwe przeniesienie", $"na {When(related, withLesson: true)}");
+                break;
+        }
+    }
+
+    /// <summary>Data zdarzenia elementu, opcjonalnie z numerem lekcji, np. <c>2026-11-20, lekcja 5</c>.</summary>
+    private static string When(ElementEntity element, bool withLesson = false)
+    {
+        var fields = TrackedElements.Fields(element);
+        var date = fields.GetValueOrDefault(TrackedElements.DateLabel(element.Type), "?");
+        var lesson = fields.GetValueOrDefault("Nr lekcji", "");
+        return !withLesson || lesson.Length == 0 ? date : $"{date}, lekcja {lesson}";
+    }
+
+    private static IEnumerable<string> MovedParts(ElementEntity element, ElementEntity previous, Func<string, string> F) => element.Type switch
+    {
+        ElementTypes.Homework => ["Zmiana terminu zadania domowego: ", F("Przedmiot"), Optional(" – ", F("Temat")), ", z ", When(previous), " na ", When(element)],
+        _ => ["Zmiana terminu: ", F("Tytuł"), Optional(" – ", F("Przedmiot")), ", z ", When(previous), " na ", When(element)]
+    };
+
+    private static IEnumerable<string> RemovedParts(ElementEntity element, ElementEntity? movedTo, Func<string, string> F)
+    {
+        var hint = movedTo is null ? "" : " – możliwe przeniesienie na " + When(movedTo);
+        IEnumerable<string> main = element.Type switch
+        {
+            ElementTypes.ScheduleEvent => ["Usunięto z terminarza: ", F("Tytuł"), F("Przedmiot") == F("Tytuł") ? "" : Optional(" – ", F("Przedmiot")), ", ", F("Data")],
+            ElementTypes.TimetableChange => ["Usunięto zmianę w planie lekcji: ", F("Data"), Optional(", lekcja ", F("Nr lekcji")), Optional(" – ", F("Zmiana"))],
+            ElementTypes.Homework => ["Usunięto zadanie domowe: ", F("Przedmiot"), Optional(" – ", F("Temat")), ", termin ", F("Termin wykonania")],
+            _ => ["Usunięto element: ", element.Type]
+        };
+        return main.Append(hint);
+    }
+
+    public static string TypeName(string type, NotificationKind kind) => kind switch
+    {
+        NotificationKind.Moved => type == ElementTypes.Homework ? "Zmiana terminu zadania domowego" : "Zmiana terminu w terminarzu",
+        NotificationKind.Removed => type switch
+        {
+            ElementTypes.ScheduleEvent => "Usunięto z terminarza",
+            ElementTypes.TimetableChange => "Usunięto zmianę w planie lekcji",
+            ElementTypes.Homework => "Usunięto zadanie domowe",
+            _ => "Usunięto element"
+        },
+        _ => TypeName(type)
+    };
 
     public static string TypeName(string type) => type switch
     {
