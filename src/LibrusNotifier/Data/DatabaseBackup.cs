@@ -44,7 +44,7 @@ public sealed class DatabaseBackup(Clock clock, IAppLog log)
     {
         if (!File.Exists(databaseFile))
         {
-            log.Info("Brak pliku bazy – kopia zapasowa pominięta.");
+            log.Info("Brak pliku bazy - kopia zapasowa pominięta.");
             return true;
         }
 
@@ -56,7 +56,7 @@ public sealed class DatabaseBackup(Clock clock, IAppLog log)
         {
             if (File.Exists(target))
             {
-                log.Info($"Kopia zapasowa {name} już istnieje – pomijam.");
+                log.Info($"Kopia zapasowa {name} już istnieje - pomijam.");
                 return true;
             }
             Directory.CreateDirectory(backupDirectory);

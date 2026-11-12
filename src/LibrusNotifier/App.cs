@@ -81,7 +81,7 @@ public static class App
         }
         if (instanceLock is null)
         {
-            log.Info($"Inna instancja LibrusNotifier już działa (blokada {paths.LockFile} jest zajęta) – kończę.");
+            log.Info($"Inna instancja LibrusNotifier już działa (blokada {paths.LockFile} jest zajęta) - kończę.");
             return ExitAlreadyRunning;
         }
 
@@ -176,12 +176,12 @@ public static class App
         }
         catch (OperationCanceledException) when (dayGuard.DayChanged)
         {
-            log.Info("Zmiana dnia – kończę działanie.");
+            log.Info("Zmiana dnia - kończę działanie.");
             endReason = "zmiana dnia";
         }
         catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
         {
-            log.Info("Przerwano działanie (Ctrl+C / SIGTERM) – kończę bez podsumowania dnia.");
+            log.Info("Przerwano działanie (Ctrl+C / SIGTERM) - kończę bez podsumowania dnia.");
             return ExitInterrupted;
         }
         catch (Exception e)

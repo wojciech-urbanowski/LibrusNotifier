@@ -375,7 +375,7 @@ public sealed class ChangeDetectionCycleTests
         await h.PingAsync(fullReview: true);
 
         var parent = Assert.Single(h.ParentMails);
-        Assert.Equal("[Librus] Zmiana terminu: Sprawdzian – Język niemiecki, z 2026-11-17 (wtorek, za 5 dni) na 2026-11-20 (piątek, za 8 dni)", parent.Subject);
+        Assert.Equal("[Librus] Zmiana terminu: Sprawdzian - Język niemiecki, z 2026-11-17 (wtorek, za 5 dni) na 2026-11-20 (piątek, za 8 dni)", parent.Subject);
         Assert.Contains("Zmiana terminu: z 2026-11-17 (wtorek, za 5 dni), lekcja 4 na 2026-11-20 (piątek, za 8 dni), lekcja 5", parent.Body);
         Assert.Contains("Zmiana terminu w terminarzu", parent.HtmlBody);
         Assert.Single(h.StudentMails);
@@ -398,7 +398,7 @@ public sealed class ChangeDetectionCycleTests
 
         await h.PingAsync(fullReview: true);
 
-        Assert.Equal("[Librus] Usunięto z terminarza: Sprawdzian – Język niemiecki, 2026-11-17 (wtorek, za 5 dni)", Assert.Single(h.ParentMails).Subject);
+        Assert.Equal("[Librus] Usunięto z terminarza: Sprawdzian - Język niemiecki, 2026-11-17 (wtorek, za 5 dni)", Assert.Single(h.ParentMails).Subject);
         Assert.Contains("Usunięto z terminarza", Assert.Single(h.StudentMails).HtmlBody);
         Assert.Contains("Status: usunięty z Librusa", h.ParentMails[0].Body);
 
@@ -510,7 +510,7 @@ public sealed class ChangeMailTemplateTests
     {
         var mail = Mail(Test("2026-11-20", "5"), NotificationKind.Moved, Test("2026-11-17"));
 
-        Assert.Equal("[Librus] Zmiana terminu: Sprawdzian – Język niemiecki, z 2026-11-17 (wtorek, za 5 dni) na 2026-11-20 (piątek, za 8 dni)", mail.Subject);
+        Assert.Equal("[Librus] Zmiana terminu: Sprawdzian - Język niemiecki, z 2026-11-17 (wtorek, za 5 dni) na 2026-11-20 (piątek, za 8 dni)", mail.Subject);
         Assert.StartsWith("Zmiana terminu w terminarzu", mail.Body);
         Assert.Contains("Zmiana terminu: z 2026-11-17 (wtorek, za 5 dni), lekcja 4 na 2026-11-20 (piątek, za 8 dni), lekcja 5", mail.Body);
         Assert.Contains("Opis: Test 2", mail.Body);
@@ -522,13 +522,13 @@ public sealed class ChangeMailTemplateTests
     public void RemovedMailSaysItWasRemovedAndMentionsPossibleMove()
     {
         var plain = Mail(Test("2026-11-17"), NotificationKind.Removed);
-        Assert.Equal("[Librus] Usunięto z terminarza: Sprawdzian – Język niemiecki, 2026-11-17 (wtorek, za 5 dni)", plain.Subject);
+        Assert.Equal("[Librus] Usunięto z terminarza: Sprawdzian - Język niemiecki, 2026-11-17 (wtorek, za 5 dni)", plain.Subject);
         Assert.StartsWith("Usunięto z terminarza", plain.Body);
         Assert.Contains("Status: usunięty z Librusa (zniknął z listy)", plain.Body);
         Assert.DoesNotContain("Możliwe przeniesienie", plain.Body);
 
         var hinted = Mail(Test("2026-11-17"), NotificationKind.Removed, Test("2026-11-20", "5"));
-        Assert.Equal("[Librus] Usunięto z terminarza: Sprawdzian – Język niemiecki, 2026-11-17 (wtorek, za 5 dni) – możliwe przeniesienie na 2026-11-20 (piątek, za 8 dni)", hinted.Subject);
+        Assert.Equal("[Librus] Usunięto z terminarza: Sprawdzian - Język niemiecki, 2026-11-17 (wtorek, za 5 dni) - możliwe przeniesienie na 2026-11-20 (piątek, za 8 dni)", hinted.Subject);
         Assert.Contains("Możliwe przeniesienie: na 2026-11-20 (piątek, za 8 dni), lekcja 5", hinted.Body);
     }
 
@@ -536,11 +536,11 @@ public sealed class ChangeMailTemplateTests
     public void RemovedMailsCoverTimetableChangesAndHomework()
     {
         var substitution = Mail(DigestElements.Timetable("2026-11-13", "zastępstwo", "1", "Język polski"), NotificationKind.Removed);
-        Assert.Equal("[Librus] Usunięto zmianę w planie lekcji: 2026-11-13 (piątek, jutro), lekcja 1 – zastępstwo", substitution.Subject);
+        Assert.Equal("[Librus] Usunięto zmianę w planie lekcji: 2026-11-13 (piątek, jutro), lekcja 1 - zastępstwo", substitution.Subject);
         Assert.StartsWith("Usunięto zmianę w planie lekcji", substitution.Body);
 
         var homework = Mail(DigestElements.Homework("2026-11-16", "Matematyka", "Zadania 1-5"), NotificationKind.Removed);
-        Assert.Equal("[Librus] Usunięto zadanie domowe: Matematyka – Zadania 1-5, termin 2026-11-16 (poniedziałek, za 4 dni)", homework.Subject);
+        Assert.Equal("[Librus] Usunięto zadanie domowe: Matematyka - Zadania 1-5, termin 2026-11-16 (poniedziałek, za 4 dni)", homework.Subject);
 
         var allDay = Mail(DigestElements.Schedule("2026-11-27", "Dzień wolny: SP 33", "Dzień wolny: SP 33"), NotificationKind.Removed);
         Assert.Equal("[Librus] Usunięto z terminarza: Dzień wolny: SP 33, 2026-11-27 (piątek, za 15 dni)", allDay.Subject);
@@ -551,7 +551,7 @@ public sealed class ChangeMailTemplateTests
     {
         var mail = Mail(DigestElements.Homework("2026-11-18", "Matematyka", "Zadania 1-5"), NotificationKind.Moved,
             DigestElements.Homework("2026-11-16", "Matematyka", "Zadania 1-5"));
-        Assert.Equal("[Librus] Zmiana terminu zadania domowego: Matematyka – Zadania 1-5, z 2026-11-16 (poniedziałek, za 4 dni) na 2026-11-18 (środa, za 6 dni)", mail.Subject);
+        Assert.Equal("[Librus] Zmiana terminu zadania domowego: Matematyka - Zadania 1-5, z 2026-11-16 (poniedziałek, za 4 dni) na 2026-11-18 (środa, za 6 dni)", mail.Subject);
         Assert.StartsWith("Zmiana terminu zadania domowego", mail.Body);
     }
 
@@ -566,7 +566,7 @@ public sealed class ChangeMailTemplateTests
     public void NewEntryMailIsUnchanged()
     {
         var mail = MailTemplates.ForElement(Test("2026-11-20", "5"), ["rodzic@example.com"], Clock);
-        Assert.StartsWith("[Librus] Terminarz: Sprawdzian – Język niemiecki, 2026-11-20", mail.Subject);
+        Assert.StartsWith("[Librus] Terminarz: Sprawdzian - Język niemiecki, 2026-11-20", mail.Subject);
         Assert.StartsWith("Nowy wpis w terminarzu", mail.Body);
     }
 }

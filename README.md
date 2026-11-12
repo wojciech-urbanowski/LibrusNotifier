@@ -101,7 +101,7 @@ kolejne numery wystąpienia.
 | `zrealizowana_lekcja` | zrealizowane lekcje | data, nr lekcji, przedmiot, nauczyciel, temat |
 
 `Elements.DataJson` zawiera wszystkie pola z listy (etykieta → wartość), `DetailsJson` – szczegóły do maila.
-Mail ma temat z prefiksem `[Librus]` opisujący element (np. `[Librus] Nowa ocena: Matematyka – 5`), a w treści
+Mail ma temat z prefiksem `[Librus]` opisujący element (np. `[Librus] Nowa ocena: Matematyka - 5`), a w treści
 wszystkie pola, szczegóły i informację, na którym koncie element jest widoczny.
 
 Mail o nowej ocenie ma dodatkowo:

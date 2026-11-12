@@ -19,7 +19,7 @@ public static class DailySummary
         var body = new StringBuilder();
         body.AppendLine($"Podsumowanie dnia {stats.Day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)} ({DayNames[(int)stats.Day.DayOfWeek]})");
         if (dayDescription is not null) body.AppendLine($"Typ dnia: {dayDescription}");
-        body.AppendLine($"Działanie: {stats.StartedLocal:HH:mm:ss} – {endLocal:HH:mm:ss} ({endReason})");
+        body.AppendLine($"Działanie: {stats.StartedLocal:HH:mm:ss} - {endLocal:HH:mm:ss} ({endReason})");
         body.AppendLine();
 
         body.AppendLine($"Pingi: {stats.Pings} (w tym z przeglądem wszystkich list: {stats.FullReviews})");
@@ -53,7 +53,7 @@ public static class DailySummary
         if (vacuum is not null) AppendVacuum(body, vacuum);
 
         var subject = $"{AdminReporter.SubjectPrefix}Podsumowanie dnia {stats.Day:yyyy-MM-dd}" +
-            (errors.Count > 0 ? $" – błędy: {errors.Sum(e => e.Count)}" : "");
+            (errors.Count > 0 ? $" - błędy: {errors.Sum(e => e.Count)}" : "");
         return new OutgoingMail(recipients, subject, body.ToString());
     }
 
@@ -72,7 +72,7 @@ public static class DailySummary
         else
         {
             var error = (vacuum.Error ?? "nieznany błąd").Split('\n')[0].TrimEnd();
-            body.AppendLine($"{title}: nie powiódł się – {error}");
+            body.AppendLine($"{title}: nie powiódł się - {error}");
         }
     }
 

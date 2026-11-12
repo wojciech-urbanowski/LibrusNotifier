@@ -52,15 +52,15 @@ public static class MailTemplates
     private static IEnumerable<string> NewParts(ElementEntity element, Func<string, string> F) =>
         element.Type switch
         {
-            ElementTypes.Grade => ["Nowa ocena: ", F("Przedmiot"), " – ", F("Ocena")],
-            ElementTypes.DescriptiveGrade => ["Nowa ocena opisowa: ", F("Przedmiot"), Optional(" – ", F("Ocena"))],
-            ElementTypes.Attendance => ["Frekwencja: ", F("Rodzaj"), Optional(" – ", F("Przedmiot")), Optional(", ", F("Data")),
+            ElementTypes.Grade => ["Nowa ocena: ", F("Przedmiot"), " - ", F("Ocena")],
+            ElementTypes.DescriptiveGrade => ["Nowa ocena opisowa: ", F("Przedmiot"), Optional(" - ", F("Ocena"))],
+            ElementTypes.Attendance => ["Frekwencja: ", F("Rodzaj"), Optional(" - ", F("Przedmiot")), Optional(", ", F("Data")),
                 Optional(", lekcja ", F("Lekcja"))],
             ElementTypes.Message => ["Nowa wiadomość od ", F("Nadawca"), ": ", F("Temat")],
             ElementTypes.Announcement => ["Nowe ogłoszenie: ", F("Tytuł")],
-            ElementTypes.ScheduleEvent => ["Terminarz: ", F("Tytuł"), Optional(" – ", F("Przedmiot")), Optional(", ", F("Data"))],
-            ElementTypes.Homework => ["Nowe zadanie domowe: ", F("Przedmiot"), Optional(" – ", F("Temat"))],
-            ElementTypes.TimetableChange => ["Zmiana w planie lekcji: ", F("Data"), Optional(", lekcja ", F("Nr lekcji")), Optional(" – ", F("Zmiana"))],
+            ElementTypes.ScheduleEvent => ["Terminarz: ", F("Tytuł"), Optional(" - ", F("Przedmiot")), Optional(", ", F("Data"))],
+            ElementTypes.Homework => ["Nowe zadanie domowe: ", F("Przedmiot"), Optional(" - ", F("Temat"))],
+            ElementTypes.TimetableChange => ["Zmiana w planie lekcji: ", F("Data"), Optional(", lekcja ", F("Nr lekcji")), Optional(" - ", F("Zmiana"))],
             ElementTypes.CompletedLesson => ["Zrealizowana lekcja: ", F("Przedmiot"), Optional(", ", F("Data")), Optional(", lekcja ", F("Nr lekcji"))],
             _ => ["Nowy element: ", element.Type]
         };
@@ -70,7 +70,7 @@ public static class MailTemplates
     {
         var extra = details.Where(d => !fields.Any(f => f.Label == d.Label && f.Value == d.Value)).ToList();
         var note = extra.Count == 0 && element.Type is ElementTypes.Message && element.DetailsJson is null
-            ? "(Treść niedostępna – sprawdź w Librusie.)"
+            ? "(Treść niedostępna - sprawdź w Librusie)"
             : null;
         var visibility = Visibility(element);
         var detected = $"{clock.ToLocal(new DateTimeOffset(detectedUtc ?? element.FirstSeenUtc, TimeSpan.Zero)):yyyy-MM-dd HH:mm}";
@@ -128,18 +128,18 @@ public static class MailTemplates
 
     private static IEnumerable<string> MovedParts(ElementEntity element, ElementEntity previous, Func<string, string> F) => element.Type switch
     {
-        ElementTypes.Homework => ["Zmiana terminu zadania domowego: ", F("Przedmiot"), Optional(" – ", F("Temat")), ", z ", When(previous), " na ", When(element)],
-        _ => ["Zmiana terminu: ", F("Tytuł"), Optional(" – ", F("Przedmiot")), ", z ", When(previous), " na ", When(element)]
+        ElementTypes.Homework => ["Zmiana terminu zadania domowego: ", F("Przedmiot"), Optional(" - ", F("Temat")), ", z ", When(previous), " na ", When(element)],
+        _ => ["Zmiana terminu: ", F("Tytuł"), Optional(" - ", F("Przedmiot")), ", z ", When(previous), " na ", When(element)]
     };
 
     private static IEnumerable<string> RemovedParts(ElementEntity element, ElementEntity? movedTo, Func<string, string> F)
     {
-        var hint = movedTo is null ? "" : " – możliwe przeniesienie na " + When(movedTo);
+        var hint = movedTo is null ? "" : " - możliwe przeniesienie na " + When(movedTo);
         IEnumerable<string> main = element.Type switch
         {
-            ElementTypes.ScheduleEvent => ["Usunięto z terminarza: ", F("Tytuł"), F("Przedmiot") == F("Tytuł") ? "" : Optional(" – ", F("Przedmiot")), ", ", F("Data")],
-            ElementTypes.TimetableChange => ["Usunięto zmianę w planie lekcji: ", F("Data"), Optional(", lekcja ", F("Nr lekcji")), Optional(" – ", F("Zmiana"))],
-            ElementTypes.Homework => ["Usunięto zadanie domowe: ", F("Przedmiot"), Optional(" – ", F("Temat")), ", termin ", F("Termin wykonania")],
+            ElementTypes.ScheduleEvent => ["Usunięto z terminarza: ", F("Tytuł"), F("Przedmiot") == F("Tytuł") ? "" : Optional(" - ", F("Przedmiot")), ", ", F("Data")],
+            ElementTypes.TimetableChange => ["Usunięto zmianę w planie lekcji: ", F("Data"), Optional(", lekcja ", F("Nr lekcji")), Optional(" - ", F("Zmiana"))],
+            ElementTypes.Homework => ["Usunięto zadanie domowe: ", F("Przedmiot"), Optional(" - ", F("Temat")), ", termin ", F("Termin wykonania")],
             _ => ["Usunięto element: ", element.Type]
         };
         return main.Append(hint);

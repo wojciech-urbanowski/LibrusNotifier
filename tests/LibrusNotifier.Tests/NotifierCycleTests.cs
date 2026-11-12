@@ -49,7 +49,7 @@ public sealed class NotifierCycleTests
         await h.PingAsync();
 
         var parentMail = Assert.Single(h.ParentMails);
-        Assert.Equal("[Librus] Nowa ocena: Matematyka – 5", parentMail.Subject);
+        Assert.Equal("[Librus] Nowa ocena: Matematyka - 5", parentMail.Subject);
         Assert.Contains("Widoczne na koncie: rodzica i ucznia", parentMail.Body);
         Assert.Single(h.StudentMails);
         Assert.Equal(2, h.Mail.Sent.Count);
@@ -261,7 +261,7 @@ public sealed class NotifierCycleTests
 
         await h.PingAsync();
 
-        Assert.Equal("[Librus] Nowa ocena: Historia – 4", Assert.Single(h.Mail.Sent).Subject);
+        Assert.Equal("[Librus] Nowa ocena: Historia - 4", Assert.Single(h.Mail.Sent).Subject);
         await using var db = h.Db.Create();
         Assert.Equal(2, await db.Elements.CountAsync());
     }

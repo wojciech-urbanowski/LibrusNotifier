@@ -41,7 +41,7 @@ public sealed class PingLoop(PollingScheduler scheduler, NotifierCycle cycle, Cl
             await RunDigestsAsync();
             return;
         }
-        if (next > clock.Now) log.Info($"Poza oknem odpytywania – czekam do {next:HH:mm}.");
+        if (next > clock.Now) log.Info($"Poza oknem odpytywania - czekam do {next:HH:mm}.");
 
         while (next is { } at)
         {

@@ -106,7 +106,7 @@ public sealed class DateAnnotationTests
 
         var mail = MailTemplates.ForElement(element, ["rodzic@example.com"], clock);
 
-        Assert.Equal("[Librus] Terminarz: Sprawdzian – Matematyka, 2026-11-13 (piątek, jutro)", mail.Subject);
+        Assert.Equal("[Librus] Terminarz: Sprawdzian - Matematyka, 2026-11-13 (piątek, jutro)", mail.Subject);
         Assert.Contains("Data: 2026-11-13 (piątek, jutro)", mail.Body);
         Assert.Matches(@">Data</th><td[^>]*><strong>2026-11-13 \(piątek, jutro\)</strong></td>", mail.HtmlBody);
         Assert.DoesNotContain("<strong>", mail.Body);

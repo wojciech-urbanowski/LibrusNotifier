@@ -78,7 +78,7 @@ public static class DigestMailTemplates
 
         foreach (var section in digest.Sections)
         {
-            var heading = section.Subtitle is null ? section.Title : $"{section.Title} – {section.Subtitle}";
+            var heading = section.Subtitle is null ? section.Title : $"{section.Title} - {section.Subtitle}";
             text.AppendLine(heading.ToUpperInvariant()).AppendLine(new string('=', Math.Min(heading.Length, 60)));
             if (section.EventCount == 0)
             {
@@ -209,7 +209,7 @@ public static class DigestMailTemplates
     {
         var lesson = e.Lesson is { } number ? $"<strong>{number}</strong>" : "";
         var hours = e.Hours.Length > 0 ? $"<span style=\"font-size:12px;{MutedStyle}\">{Encode(e.Hours)}</span>" : "";
-        if (lesson.Length == 0 && hours.Length == 0) return $"<span style=\"{MutedStyle}\">—</span>";
+        if (lesson.Length == 0 && hours.Length == 0) return $"<span style=\"{MutedStyle}\">-</span>";
         return lesson.Length > 0 && hours.Length > 0 ? lesson + "<br>" + hours : lesson + hours;
     }
 

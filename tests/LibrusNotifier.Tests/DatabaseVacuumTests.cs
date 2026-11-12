@@ -139,7 +139,7 @@ public sealed class DatabaseVacuumTests : IDisposable
 
         var lines = SummaryLines(report);
 
-        Assert.Equal("Vacuum bazy (dzień roku 320): nie powiódł się – database is locked", lines[^1]);
+        Assert.Equal("Vacuum bazy (dzień roku 320): nie powiódł się - database is locked", lines[^1]);
     }
 
     [Fact]

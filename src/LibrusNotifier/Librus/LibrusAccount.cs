@@ -88,7 +88,7 @@ public sealed class LibrusAccount : IAccountGateway
     {
         if (_client is not null && !_activity.IsExpired) return null;
         if (_client is not null)
-            _log.Info($"{Name}: przerwa dłuższa niż limit bezczynności ({_activity.IdleLimit.TotalMinutes:0.##} min) – ponowne logowanie.");
+            _log.Info($"{Name}: przerwa dłuższa niż limit bezczynności ({_activity.IdleLimit.TotalMinutes:0.##} min) - ponowne logowanie.");
         return await LoginAsync(cancellationToken);
     }
 

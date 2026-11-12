@@ -72,6 +72,7 @@ public sealed class ElementTests
         Assert.Equal(2, items.Count);
         Assert.All(items, i => Assert.Equal(ElementTypes.TimetableChange, i.Type));
         Assert.Contains(items[0].Fields, f => f is { Label: "Nauczyciel (zmiana)", Value: "Jan Kowalski" });
+        Assert.Contains(items[0].Fields, f => f is { Label: "Godziny", Value: "08:00 - 08:45" });
     }
 
     [Fact]

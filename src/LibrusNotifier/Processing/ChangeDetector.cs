@@ -75,7 +75,7 @@ public sealed class ChangeDetector(NotifierDbContext db, Clock clock, IAppLog lo
 
         if (gone.Count > MaxChangesPerCycle)
         {
-            log.Warn($"Z list zniknęło naraz {gone.Count} wpisów z przyszłą datą – to więcej niż {MaxChangesPerCycle}, więc pomijam powiadomienia " +
+            log.Warn($"Z list zniknęło naraz {gone.Count} wpisów z przyszłą datą - to więcej niż {MaxChangesPerCycle}, więc pomijam powiadomienia " +
                 "o zmianach (możliwy błąd odpowiedzi Librusa). Wpisy, które wrócą na listę, są traktowane jak zwykle.");
             foreach (var item in gone) item.Element.GoneHandledUtc = now;
             await db.SaveChangesAsync(ct);

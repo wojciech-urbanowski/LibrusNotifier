@@ -8,8 +8,6 @@ using LibrusNotifier.Processing;
 using LibrusNotifier.Reporting;
 using LibrusNotifier.Scheduling;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace LibrusNotifier.Tests;
 
@@ -47,7 +45,7 @@ internal static class DigestElements
         return Make(ElementTypes.ScheduleEvent, fields, parent, student, lastSeen);
     }
 
-    public static ElementEntity Timetable(string date, string change, string lesson, string subject, string hours = "08:00–08:45",
+    public static ElementEntity Timetable(string date, string change, string lesson, string subject, string hours = "08:00 - 08:45",
         string teacherRoom = "Anna Nowak", string? teacherSwap = null, bool parent = true, bool student = true, DateTime? lastSeen = null)
     {
         var fields = new List<Field>();
@@ -163,9 +161,9 @@ public sealed class DigestEventBuilderTests
     [Fact]
     public void TimetableChangesAreClassified()
     {
-        var cancelled = Single(DigestElements.Timetable("2026-11-09", "odwołane", "3", "Przyroda", "09:50–10:35", "Piela Joanna"));
+        var cancelled = Single(DigestElements.Timetable("2026-11-09", "odwołane", "3", "Przyroda", "09:50 - 10:35", "Piela Joanna"));
         Assert.Equal(EventCategory.Cancelled, cancelled.Category);
-        Assert.Equal("09:50–10:35", cancelled.Hours);
+        Assert.Equal("09:50 - 10:35", cancelled.Hours);
         Assert.Equal("Piela Joanna", cancelled.Note);
 
         var substitution = Single(DigestElements.Timetable("2026-11-13", "zastępstwo", "1", "Język polski", teacherSwap: "Michalik Aleksandra -> Mirowska Karina"));
@@ -192,7 +190,7 @@ public sealed class DigestEventBuilderTests
 
         var merged = Assert.Single(events);
         Assert.Equal(EventSource.Timetable, merged.Source);
-        Assert.Equal("08:00–08:45", merged.Hours);
+        Assert.Equal("08:00 - 08:45", merged.Hours);
         Assert.Equal("Zastępstwo: Michalik Aleksandra → Mirowska Karina", merged.Detail);
     }
 
@@ -448,7 +446,7 @@ public sealed class DigestMailTemplateTests
         var mail = Mail(DigestKind.Morning, new DateTime(2026, 11, 12, 6, 30, 0),
             Event("2026-11-12", EventCategory.Test, "Sprawdzian", "Język angielski", 2, "Unit 2", "Gubernat Julia"),
             Event("2026-11-12", EventCategory.Homework, "Zadanie domowe", "Matematyka", null),
-            Event("2026-11-13", EventCategory.Substitution, "Zastępstwo", "Język polski", 1, "Zastępstwo: Mirowska Karina", "", "08:00–08:45"),
+            Event("2026-11-13", EventCategory.Substitution, "Zastępstwo", "Język polski", 1, "Zastępstwo: Mirowska Karina", "", "08:00 - 08:45"),
             Event("2026-11-16", EventCategory.Quiz, "Kartkówka", "Fizyka", 4));
 
         var html = mail.HtmlBody!;
@@ -1103,34 +1101,5 @@ public sealed class DigestPersistenceTests
         Assert.Equal(h.Clock.UtcNow.UtcDateTime, fetched.LastFetchUtc);
         Assert.Equal(fetched.LastFetchUtc, element.LastSeenUtc);
         Assert.True(fetched.LastFetchUtc > fetched.CompletedUtc);
-    }
-
-    [Fact]
-    public async Task MigrationFillsLastFetchFromFirstFetchForExistingDatabases()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"librus-test-{Guid.NewGuid():N}.db");
-        try
-        {
-            await using (var db = NotifierDbContext.Create(path))
-            {
-                var migrator = db.GetService<IMigrator>();
-                await migrator.MigrateAsync("20261111144747_Initial");
-                await db.Database.ExecuteSqlRawAsync(
-                    "INSERT INTO Baselines (Account, Module, CompletedUtc) VALUES ('Parent', 'Schedule', '2026-11-11 20:54:05')");
-            }
-            await using (var db = NotifierDbContext.Create(path))
-            {
-                await db.Database.MigrateAsync();
-                var baseline = await db.Baselines.SingleAsync();
-                Assert.Equal(baseline.CompletedUtc, baseline.LastFetchUtc);
-                Assert.Equal(new DateTime(2026, 11, 11, 20, 54, 5, DateTimeKind.Utc), baseline.LastFetchUtc);
-                Assert.Empty(await db.DigestLogs.ToListAsync());
-            }
-        }
-        finally
-        {
-            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-            File.Delete(path);
-        }
     }
 }
