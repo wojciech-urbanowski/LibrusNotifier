@@ -11,9 +11,20 @@ namespace LibrusNotifier.Mail;
 /// Dopisuje do dat w treści maila opis względem dzisiaj, np. <c>2026-11-13 (piątek, jutro)</c>. Rozpoznaje daty ISO
 /// (<c>rrrr-mm-dd</c>, opcjonalnie z godziną – opis jest wtedy za godziną). W wersji HTML data wraz z opisem jest pogrubiona,
 /// gdy dotyczy dnia dzisiejszego, jutrzejszego albo – gdy dziś jest wolne (weekend, święto, ferie) – pierwszego dnia szkolnego po wolnym.
+/// Daty czysto techniczne (np. kiedy nadano wiadomość) dostają tylko nazwę dnia tygodnia i nie są pogrubiane (<see cref="DateMode.WeekdayOnly"/>).
 /// </summary>
 public sealed partial class DateAnnotator
 {
+    /// <summary>Jak opisywać daty w tekście.</summary>
+    public enum DateMode
+    {
+        /// <summary>Dzień tygodnia i odległość od dzisiaj („piątek, jutro”); daty „na teraz” są pogrubione w HTML-u.</summary>
+        Relative,
+
+        /// <summary>Tylko dzień tygodnia („czwartek”), bez pogrubienia: dla dat czysto technicznych, których bliskość nic nie znaczy.</summary>
+        WeekdayOnly
+    }
+
     private static readonly string[] DayNames = ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"];
 
     /// <summary>Tyle dni do przodu szukany jest pierwszy dzień szkolny po wolnym (dłuższa przerwa niż wakacje się nie zdarza).</summary>
@@ -41,7 +52,7 @@ public sealed partial class DateAnnotator
     private static partial Regex DatePattern();
 
     /// <summary>Tekst z dopisanymi opisami dat, bez formatowania.</summary>
-    public string Plain(string text) => string.Concat(Split(text).Select(s => s.Text));
+    public string Plain(string text, DateMode mode = DateMode.Relative) => string.Concat(Split(text, mode).Select(s => s.Text));
 
     /// <summary>
     /// Jak <see cref="Plain"/>, ale gdy wynik przekracza <paramref name="maxLength"/>, skraca (wielokropkiem) najwcześniejszy fragment
@@ -50,7 +61,7 @@ public sealed partial class DateAnnotator
     public string PlainFitting(string text, int maxLength)
     {
         const int MinKept = 8;
-        var segments = Split(text).ToList();
+        var segments = Split(text, DateMode.Relative).ToList();
         var overflow = segments.Sum(s => s.Text.Length) - maxLength;
         if (overflow > 0)
         {
@@ -70,10 +81,10 @@ public sealed partial class DateAnnotator
     }
 
     /// <summary>Tekst zakodowany do HTML-a (znaki nowej linii jako <c>&lt;br&gt;</c>), z pogrubionymi datami „na teraz”.</summary>
-    public string Html(string text)
+    public string Html(string text, DateMode mode = DateMode.Relative)
     {
         var html = new StringBuilder();
-        foreach (var segment in Split(text.Replace("\r\n", "\n").Replace('\r', '\n')))
+        foreach (var segment in Split(text.Replace("\r\n", "\n").Replace('\r', '\n'), mode))
         {
             var encoded = WebUtility.HtmlEncode(segment.Text);
             html.Append(segment.Emphasize ? $"<strong>{encoded}</strong>" : encoded);
@@ -102,14 +113,16 @@ public sealed partial class DateAnnotator
 
     private readonly record struct Segment(string Text, bool IsDate, bool Emphasize);
 
-    private IEnumerable<Segment> Split(string text)
+    private IEnumerable<Segment> Split(string text, DateMode mode)
     {
         var last = 0;
         foreach (Match match in DatePattern().Matches(text))
         {
             if (!DateOnly.TryParseExact(match.Value[..10], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)) continue;
             if (match.Index > last) yield return new Segment(text[last..match.Index], false, false);
-            yield return new Segment($"{match.Value} ({Describe(date)})", true, IsEmphasized(date));
+            yield return mode == DateMode.WeekdayOnly
+                ? new Segment($"{match.Value} ({DayNames[(int)date.DayOfWeek]})", true, false)
+                : new Segment($"{match.Value} ({Describe(date)})", true, IsEmphasized(date));
             last = match.Index + match.Length;
         }
         if (last < text.Length) yield return new Segment(text[last..], false, false);

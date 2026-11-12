@@ -113,6 +113,59 @@ public sealed class DateAnnotationTests
     }
 
     [Fact]
+    public void WeekdayOnlyModeAddsDayNameWithoutRelativeWordOrBold()
+    {
+        var annotator = Annotator(Thursday);
+
+        Assert.Equal("2026-11-12 18:56:07 (czwartek)", annotator.Plain("2026-11-12 18:56:07", DateAnnotator.DateMode.WeekdayOnly));
+        Assert.Equal("2026-11-12 18:56:07 (czwartek)", annotator.Html("2026-11-12 18:56:07", DateAnnotator.DateMode.WeekdayOnly));
+    }
+
+    [Fact]
+    public void MessageSentDateIsTechnicalButDatesInItsBodyAreNot()
+    {
+        var clock = new FakeClock(Thursday);
+        var element = new ElementEntity
+        {
+            Type = ElementTypes.Message,
+            Key = "k",
+            DataJson = FieldJson.Serialize([new Field("Nadawca", "Jan Kowalski"), new Field("Temat", "Wycieczka"), new Field("Data", "2026-11-12 18:56:07")]),
+            DetailsJson = FieldJson.Serialize([new Field("Treść", "Wyjazd 2026-11-13")]),
+            VisibleToParent = true,
+            FirstSeenUtc = clock.UtcNow.UtcDateTime
+        };
+
+        var mail = MailTemplates.ForElement(element, ["rodzic@example.com"], clock);
+
+        Assert.Contains("Data: 2026-11-12 18:56:07 (czwartek)", mail.Body);
+        Assert.Contains("Wyjazd 2026-11-13 (piątek, jutro)", mail.Body);
+        Assert.Matches(@">Data</th><td[^>]*>2026-11-12 18:56:07 \(czwartek\)</td>", mail.HtmlBody);
+        Assert.Contains("<strong>2026-11-13 (piątek, jutro)</strong>", mail.HtmlBody);
+        Assert.DoesNotContain("dziś", mail.HtmlBody);
+    }
+
+    [Fact]
+    public void FooterContainsAppVersionInTextAndHtml()
+    {
+        var clock = new FakeClock(Thursday);
+        var element = new ElementEntity
+        {
+            Type = ElementTypes.Announcement,
+            Key = "k",
+            DataJson = FieldJson.Serialize([new Field("Tytuł", "Ogłoszenie")]),
+            VisibleToParent = true,
+            FirstSeenUtc = clock.UtcNow.UtcDateTime
+        };
+        var footer = $"Wiadomość wysłana automatycznie przez LibrusNotifier {App.Version}.";
+
+        var mail = MailTemplates.ForElement(element, ["rodzic@example.com"], clock);
+
+        Assert.NotEqual("?", App.Version);
+        Assert.EndsWith(footer + Environment.NewLine, mail.Body);
+        Assert.Contains(footer + "</p>", mail.HtmlBody);
+    }
+
+    [Fact]
     public void LongSubjectIsShortenedBeforeTheDateNotInsideIt()
     {
         var clock = new FakeClock(Thursday);
