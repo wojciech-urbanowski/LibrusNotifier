@@ -4,7 +4,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>LibrusNotifier</RootNamespace>
     <AssemblyName>LibrusNotifier</AssemblyName>
-    <Version>0.3.1</Version>
+    <Version>0.3.2</Version>
     <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
     <!-- Bez zależności od ICU (np. na Raspberry Pi OS Lite). Strefa czasowa: tzdata (Linux) lub rejestr (Windows). -->
     <InvariantGlobalization>true</InvariantGlobalization>
