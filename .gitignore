@@ -1,0 +1,22 @@
+# Build
+bin/
+obj/
+artifacts/
+publish/
+TestResults/
+*.user
+.vs/
+.idea/
+
+# Dane lokalne: konfiguracja z hasłami, baza, cache kalendarza, logi, blokada instancji.
+# Wzorzec bez danych dostępowych: examples/librus_config.txt
+librus_config.txt
+!examples/librus_config.txt
+# Tylko katalog danych w katalogu głównym (nie src/LibrusNotifier/Data z kodem – Windows ignoruje wielkość liter).
+/data/
+*.db
+*.db-shm
+*.db-wal
+ferie_cache.json
+librus_notifier.lock
+*.log

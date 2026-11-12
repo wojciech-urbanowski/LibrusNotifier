@@ -1,0 +1,38 @@
+# Wzorzec konfiguracji LibrusNotifier (bez danych dostępowych).
+# Skopiuj do katalogu aplikacji jako librus_config.txt i uzupełnij. Plik musi być zapisany w UTF-8.
+# Puste linie i linie zaczynające się od # lub ; są pomijane. Komentarze na końcu linii nie są obsługiwane.
+# Wartość to wszystko po pierwszym znaku '=' (bez zmiennych i sekwencji ucieczki); spacje na brzegach są usuwane.
+# Zmiana pliku wymaga ponownego uruchomienia aplikacji.
+
+[rodzic]
+login=LOGIN_RODZICA
+haslo=HASLO_RODZICA
+
+[uczen]
+login=LOGIN_UCZNIA
+haslo=HASLO_UCZNIA
+
+# Sekcja opcjonalna; domyślnie 9 minut. Ułamki z kropką, np. 7.5.
+[sesja]
+limit_bezczynnosci_minuty=9
+
+# Konto Gmail nadawcy i hasło aplikacji (https://myaccount.google.com/apppasswords).
+[gmail]
+email=nadawca@gmail.com
+app_password=HASLO_APLIKACJI
+
+# Jeden adres na wiersz, bez kluczy. Co najmniej jeden adres.
+[odbiorcy_rodzice]
+rodzic@example.com
+
+# Nagłówek wymagany, lista może pozostać pusta.
+[odbiorcy_uczen]
+uczen@example.com
+
+# Log działania i komunikaty administracyjne. Co najmniej jeden adres.
+[odbiorcy_log]
+administrator@example.com
+
+# Województwo (ferie zimowe), np. dolnoslaskie, mazowieckie, slaskie, malopolskie.
+[kalendarz]
+wojewodztwo=dolnoslaskie
