@@ -26,7 +26,8 @@ dotnet publish src/LibrusNotifier -c Release -r win-x64 --self-contained false -
    dotychczasowe dane, bez powiadomień.
 
 Konfiguracja i dane są w katalogu pliku wykonywalnego (niezależnie od katalogu roboczego); inny katalog wskazuje
-`--katalog <ścieżka>`. Baza: `data/librus.db`, logi dzienne: `data/logs`, cache ferii: `data/ferie_cache.json`.
+`--katalog <ścieżka>`. Baza: `data/librus.db`, kopie zapasowe bazy: `data/backups`, logi dzienne: `data/logs`,
+cache ferii: `data/ferie_cache.json`.
 
 ### Raspberry Pi (cron)
 
@@ -69,6 +70,11 @@ schtasks /Create /TN "LibrusNotifier" /SC DAILY /ST 00:05 /TR "C:\LibrusNotifier
   wydarzenia. Powstają wyłącznie z danych w bazie, bez żądań do Librusa. Rodzaje wydarzeń mają pastelowe kolory
   (sprawdzian – czerwony mocniejszy, kartkówka – czerwony lżejszy, zadanie domowe – fioletowy, zastępstwo – zielony,
   odwołane zajęcia – pomarańczowy, dzień wolny – niebieski, wydarzenie – żółty, inne – szary).
+- Kopia zapasowa bazy: przy każdym starcie (przed migracją) powstaje `data/backups/librus-RRRR-MM-DD_GGmm.db` (czas
+  z dokładnością do minuty; jeśli plik o tej nazwie już jest, kopii się nie powtarza). Kopie starsze niż miesiąc są kasowane.
+  Nieudana kopia wstrzymuje kasowanie starych.
+- Vacuum bazy: na zakończenie działania w dni roku podzielne przez 10 (10., 20., 30. … dzień roku); wynik (rozmiar przed
+  i po, czas) jest na końcu podsumowania dnia dla administratorów.
 - Administratorzy (`[odbiorcy_log]`) dostają natychmiast pierwsze wystąpienie każdego błędu krytycznego w danym dniu
   oraz podsumowanie dnia (liczba pingów, żądań HTTP łącznie i na konto, nowości, maili, błędów).
 

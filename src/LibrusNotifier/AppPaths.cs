@@ -12,6 +12,7 @@ public sealed class AppPaths
         LockFile = Path.Combine(AppDirectory, "librus_notifier.lock");
         DataDirectory = Path.Combine(AppDirectory, "data");
         DatabaseFile = Path.Combine(DataDirectory, "librus.db");
+        BackupDirectory = Path.Combine(DataDirectory, "backups");
         LogDirectory = Path.Combine(DataDirectory, "logs");
         HolidayCacheFile = Path.Combine(DataDirectory, "ferie_cache.json");
     }
@@ -24,6 +25,7 @@ public sealed class AppPaths
     public string LockFile { get; }
     public string DataDirectory { get; }
     public string DatabaseFile { get; }
+    public string BackupDirectory { get; }
     public string LogDirectory { get; }
     public string HolidayCacheFile { get; }
 }
