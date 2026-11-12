@@ -81,13 +81,81 @@ public sealed class NotifierCycleTests
         {
             var html = mail.HtmlBody!;
             var report = html[html.IndexOf("<h2", StringComparison.Ordinal)..];
-            Assert.Contains("Oceny z przedmiotu Matematyka (od najnowszej)", report);
+            Assert.Contains("Oceny z przedmiotu Matematyka, semestr 1 (od najnowszej)", report);
             Assert.Matches(@"2026-11-12 \(nowa\).*2026-11-05.*2026-10-01", report.Replace("\r", "").Replace("\n", ""));
             Assert.DoesNotContain("2026-11-06", report); // piątka z fizyki
             Assert.Matches(@"(?s)2026-11-12\s+5\s.*\(nowa\).*2026-11-05\s+3\s.*2026-10-01\s+4\s", mail.Body);
             Assert.DoesNotContain("Fizyka", mail.Body.Split("Oceny z przedmiotu")[1]);
         }
     }
+
+    [Fact]
+    public async Task StartOfTheSecondSemesterStartsANewReportWithoutFirstSemesterGrades()
+    {
+        using var h = new CycleHarness();
+        foreach (var grade in new[] { Items.Grade("Matematyka", "4", "2026-10-01"), Items.Grade("Matematyka", "3", "2027-01-20"), Items.Grade("Fizyka", "5", "2027-01-21") })
+        {
+            h.Parent.Lists[ModuleKind.Grades].Add(grade);
+            h.Student.Lists[ModuleKind.Grades].Add(grade);
+        }
+        await h.BaselineAsync();
+
+        // Pierwsza ocena z drugiego semestru: w Librusie obok niej nadal są wszystkie oceny z pierwszego.
+        h.Clock.Advance(TimeSpan.FromDays(30));
+        var first = Items.Grade("Matematyka", "2", "2027-02-08", semester: 2);
+        h.Parent.Lists[ModuleKind.Grades].Add(first);
+        h.Student.Lists[ModuleKind.Grades].Add(first);
+        h.Parent.Counters = h.Student.Counters = PanelCounters.Of((ModuleKind.Grades, 1));
+        await h.PingAsync();
+
+        foreach (var mail in new[] { Assert.Single(h.ParentMails), Assert.Single(h.StudentMails) })
+        {
+            var report = mail.Body[mail.Body.IndexOf("Oceny z przedmiotu", StringComparison.Ordinal)..];
+            Assert.StartsWith("Oceny z przedmiotu Matematyka, semestr 2 (od najnowszej):", report);
+            Assert.Equal(["2027-02-08  2    Kartkówka, waga 2 (nowa)"], ReportLines(report));
+        }
+
+        // Kolejna ocena: raport ma obie oceny z drugiego semestru i nadal żadnej z pierwszego.
+        h.Mail.Sent.Clear();
+        h.Clock.Advance(TimeSpan.FromDays(7));
+        var second = Items.Grade("Matematyka", "5", "2027-02-15", semester: 2);
+        h.Parent.Lists[ModuleKind.Grades].Add(second);
+        h.Student.Lists[ModuleKind.Grades].Add(second);
+        h.Parent.Counters = h.Student.Counters = PanelCounters.Of((ModuleKind.Grades, 1));
+        await h.PingAsync();
+
+        var next = Assert.Single(h.ParentMails);
+        var nextReport = next.Body[next.Body.IndexOf("Oceny z przedmiotu", StringComparison.Ordinal)..];
+        Assert.Equal(["2027-02-15  5    Kartkówka, waga 2 (nowa)", "2027-02-08  2    Kartkówka, waga 2"], ReportLines(nextReport));
+    }
+
+    [Fact]
+    public async Task FirstGradeOfANewSchoolYearHasNoGradesOfThePreviousYearEvenWhenTheyAreStillOnTheList()
+    {
+        using var h = new CycleHarness();
+        var lastYear = new[] { Items.Grade("Matematyka", "4", "2026-10-01"), Items.Grade("Matematyka", "3", "2027-03-05", semester: 2) };
+        foreach (var grade in lastYear)
+        {
+            h.Parent.Lists[ModuleKind.Grades].Add(grade);
+            h.Student.Lists[ModuleKind.Grades].Add(grade);
+        }
+        await h.BaselineAsync();
+
+        h.Clock.Advance(TimeSpan.FromDays(100));
+        var added = Items.Grade("Matematyka", "5", "2027-09-20");
+        h.Parent.Lists[ModuleKind.Grades].Add(added); // stare oceny nie zniknęły z listy
+        h.Student.Lists[ModuleKind.Grades].Add(added);
+        h.Parent.Counters = h.Student.Counters = PanelCounters.Of((ModuleKind.Grades, 1));
+        await h.PingAsync();
+
+        var mail = Assert.Single(h.ParentMails);
+        var report = mail.Body[mail.Body.IndexOf("Oceny z przedmiotu", StringComparison.Ordinal)..];
+        Assert.Equal(["2027-09-20  5    Kartkówka, waga 2 (nowa)"], ReportLines(report));
+    }
+
+    /// <summary>Wiersze raportu w wersji tekstowej (po tytule): zaczynają się od daty.</summary>
+    private static string[] ReportLines(string report) =>
+        report.Replace("\r", "").Split('\n').Where(l => l.StartsWith("20", StringComparison.Ordinal)).ToArray();
 
     [Fact]
     public async Task CorrectedGradeDisappearsFromTheReportOfTheNewGrade()

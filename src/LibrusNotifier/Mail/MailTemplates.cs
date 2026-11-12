@@ -299,7 +299,8 @@ public static class MailTemplates
         }
     }
 
-    private static string ReportTitle(GradeReport report) => $"Oceny z przedmiotu {report.Subject} (od najnowszej)";
+    private static string ReportTitle(GradeReport report) =>
+        $"Oceny z przedmiotu {report.Subject}{(report.Semester is { } semester ? $", semestr {semester}" : "")} (od najnowszej)";
 
     private static string Encode(string text) => WebUtility.HtmlEncode(text);
 

@@ -237,7 +237,7 @@ public sealed class GradeMailTests
 
         var html = mail.HtmlBody!;
         var report = html[html.IndexOf("<h2", StringComparison.Ordinal)..];
-        Assert.Contains("Oceny z przedmiotu Matematyka (od najnowszej)", report);
+        Assert.Contains("Oceny z przedmiotu Matematyka, semestr 1 (od najnowszej)", report);
         AssertInOrder(report, ">2026-11-12 (nowa)<", ">2026-10-15<", ">2026-09-20<");
         // Kolory ocen w raporcie takie jak w treści maila: piątka, 4+ jak czwórka, trójka.
         AssertInOrder(report, "background:#8fe0a1;color:#1f1f1f;font-weight:600;\">5<", "background:#cdeccf;color:#1f1f1f;font-weight:600;\">4+<",
@@ -255,7 +255,7 @@ public sealed class GradeMailTests
             GradeElement("Matematyka", "3", "2026-09-20", "Kartkówka", "2"));
 
         var lines = mail.Body.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
-        var start = lines.IndexOf("Oceny z przedmiotu Matematyka (od najnowszej):");
+        var start = lines.IndexOf("Oceny z przedmiotu Matematyka, semestr 1 (od najnowszej):");
         Assert.True(start > 0);
         Assert.Matches(@"^2026-11-12\s+5\s+Sprawdzian, waga 3 \(nowa\)$", lines[start + 1]);
         Assert.Matches(@"^2026-09-20\s+3\s+Kartkówka, waga 2$", lines[start + 2]);
@@ -326,6 +326,28 @@ public sealed class GradeMailTests
     }
 
     [Fact]
+    public void ReportTitleNamesTheSemesterOfTheNewGrade()
+    {
+        var current = GradeElements.Create("Matematyka", "5", "2027-02-10", semester: "2");
+
+        var mail = MailTemplates.ForElement(current, Parent, _clock, subjectGrades: [current]);
+
+        Assert.Contains("Oceny z przedmiotu Matematyka, semestr 2 (od najnowszej)", mail.HtmlBody);
+        Assert.Contains("Oceny z przedmiotu Matematyka, semestr 2 (od najnowszej):", mail.Body);
+    }
+
+    [Fact]
+    public void ReportTitleHasNoSemesterWhenTheGradeHasNone()
+    {
+        var current = GradeElements.Create("Matematyka", "5", "2026-11-12", semester: null);
+
+        var mail = MailTemplates.ForElement(current, Parent, _clock, subjectGrades: [current]);
+
+        Assert.Contains("Oceny z przedmiotu Matematyka (od najnowszej)", mail.HtmlBody);
+        Assert.DoesNotContain("semestr", mail.HtmlBody!.Split("<h2")[1]);
+    }
+
+    [Fact]
     public void ReportIsOnlyForNewGrades()
     {
         var current = GradeElement("Matematyka", "5", "2026-11-12");
@@ -361,7 +383,7 @@ internal static class GradeElements
     /// <summary>Ocena jak z bazy (pola jak z <c>LibrusLists.FromGrades</c>), widoczna na obu kontach.</summary>
     public static ElementEntity Create(string subject, string mark, string date, string category = "Sprawdzian", string weight = "3",
         bool counts = true, DateTime? firstSeen = null, bool parent = true, bool student = true, DateTime? lastSeen = null,
-        string type = ElementTypes.Grade)
+        string type = ElementTypes.Grade, string? semester = "1")
     {
         var seen = firstSeen ?? new DateTime(2026, 11, 12, 9, 0, 0, DateTimeKind.Utc);
         return new ElementEntity
@@ -372,7 +394,7 @@ internal static class GradeElements
             DataJson = FieldJson.Serialize([
                 new Field("Przedmiot", subject), new Field("Ocena", mark), new Field("Kategoria", category), new Field("Data", date),
                 new Field("Nauczyciel", "Anna Nowak"), new Field("Waga", weight), new Field("Liczona do średniej", counts ? "tak" : "nie"),
-                new Field("Semestr", "1")
+                .. semester is null ? Array.Empty<Field>() : [new Field("Semestr", semester)]
             ]),
             VisibleToParent = parent,
             VisibleToStudent = student,
@@ -487,4 +509,116 @@ public sealed class GradeHistoryTests
 
         Assert.Empty(GradeHistory.ForSubject(current, [current], BothFetched, RecipientGroup.Parents));
     }
+
+    private static ElementEntity Grade(string mark, string date, string? semester) =>
+        GradeElements.Create("Matematyka", mark, date, semester: semester, lastSeen: Fetch);
+
+    [Fact]
+    public void ReportOfASecondSemesterGradeHasNoFirstSemesterGrades()
+    {
+        // Lista w Librusie obejmuje oba semestry, więc po starcie drugiego wszystkie oceny z pierwszego nadal są w bazie i „widoczne”.
+        var current = Grade("5", "2027-02-10", "2");
+        var firstOld = Grade("3", "2026-10-01", "1");
+        var firstJanuary = Grade("4", "2027-01-20", "1");
+        var firstEnteredLate = Grade("2", "2027-02-02", "1"); // wpisana do pierwszego semestru już po jego zakończeniu: liczy się kolumna, nie data
+        var secondEarlier = Grade("4", "2027-02-03", "2");
+
+        var result = GradeHistory.ForSubject(current, [firstOld, firstJanuary, firstEnteredLate, secondEarlier], BothFetched, RecipientGroup.Parents);
+
+        Assert.Equal([secondEarlier, current], result);
+    }
+
+    [Fact]
+    public void ReportOfAFirstSemesterGradeAddedLateHasNoSecondSemesterGrades()
+    {
+        var current = Grade("5", "2027-01-25", "1");
+        var first = Grade("3", "2026-10-01", "1");
+        var second = Grade("4", "2027-02-03", "2");
+
+        var result = GradeHistory.ForSubject(current, [first, second], BothFetched, RecipientGroup.Parents);
+
+        Assert.Equal([first, current], result);
+    }
+
+    [Fact]
+    public void ReportOfTheFirstGradeOfANewSchoolYearHasNoGradesOfThePreviousYearStillInTheDatabase()
+    {
+        // Oceny sprzed wakacji mogą nie być jeszcze oznaczone jako zniknięte (konto ucznia nie pobrało listy), a semestr się powtarza.
+        var current = Grade("5", "2027-09-20", "1");
+        var thisYear = Grade("4", "2027-09-10", "1");
+        var lastYearFirst = Grade("3", "2026-10-01", "1");
+        var lastYearSecond = Grade("2", "2027-03-01", "2");
+
+        var result = GradeHistory.ForSubject(current, [lastYearFirst, lastYearSecond, thisYear], BothFetched, RecipientGroup.Parents);
+
+        Assert.Equal([thisYear, current], result);
+    }
+
+    [Fact]
+    public void ReportOfASecondSemesterGradeHasNoSecondSemesterGradesOfThePreviousYear()
+    {
+        var current = Grade("5", "2028-02-10", "2");
+        var lastYearSecond = Grade("2", "2027-03-01", "2");
+        var thisYearSecond = Grade("4", "2028-02-03", "2");
+
+        var result = GradeHistory.ForSubject(current, [lastYearSecond, thisYearSecond], BothFetched, RecipientGroup.Parents);
+
+        Assert.Equal([thisYearSecond, current], result);
+    }
+
+    [Fact]
+    public void SemesterOneLastsFromSeptemberToJanuaryOfTheSameSchoolYear()
+    {
+        var current = Grade("5", "2027-01-25", "1");
+        var september = Grade("3", "2026-09-01", "1");
+
+        Assert.Equal([september, current], GradeHistory.ForSubject(current, [september], BothFetched, RecipientGroup.Parents));
+    }
+
+    [Fact]
+    public void GradeWithUnknownSemesterOrDateIsNotExcluded()
+    {
+        // Brak danych (niepoprawny semestr, nieczytelna data) nie może ukrywać ocen: wniosek o innym okresie wymaga znajomości obu stron.
+        var current = Grade("5", "2027-02-10", "2");
+        var noSemester = Grade("3", "2027-02-01", null);
+        var wrongSemester = Grade("4", "2027-02-02", "3");
+        var noDate = Grade("2", "brak daty", "2");
+        var otherSemesterNoDate = Grade("1", "brak daty", "1"); // semestr znany i inny: wyklucza także bez daty
+
+        var result = GradeHistory.ForSubject(current, [noSemester, wrongSemester, noDate, otherSemesterNoDate], BothFetched, RecipientGroup.Parents);
+
+        Assert.Equal([noSemester, wrongSemester, noDate, current], result);
+    }
+
+    [Fact]
+    public void GradeWithoutSemesterGetsTheReportOfAllItsSchoolYearOnly()
+    {
+        var current = Grade("5", "2027-02-10", null);
+        var first = Grade("3", "2026-10-01", "1");
+        var second = Grade("4", "2027-02-03", "2");
+        var previousYear = Grade("2", "2026-03-01", "2");
+
+        var result = GradeHistory.ForSubject(current, [first, second, previousYear], BothFetched, RecipientGroup.Parents);
+
+        Assert.Equal([first, second, current], result);
+    }
+
+    [Theory]
+    [InlineData("2026-08-31", 2025)]
+    [InlineData("2026-09-01", 2026)]
+    [InlineData("2026-12-31", 2026)]
+    [InlineData("2027-01-01", 2026)]
+    [InlineData("2027-06-30", 2026)]
+    public void SchoolYearStartsInSeptember(string date, int expected) =>
+        Assert.Equal(expected, GradeTerm.SchoolYearOf(DateOnly.ParseExact(date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)));
+
+    [Theory]
+    [InlineData("1", "2026-10-01", 1, 2026)]
+    [InlineData("2", "2027-02-10 (poniedziałek)", 2, 2026)]
+    [InlineData("3", "2026-10-01", null, 2026)]
+    [InlineData("x", "2026-10-01", null, 2026)]
+    [InlineData(null, "2026-10-01", null, 2026)]
+    [InlineData("2", "brak daty", 2, null)]
+    public void TermIsReadFromTheSemesterAndDateFields(string? semester, string date, int? expectedSemester, int? expectedYear) =>
+        Assert.Equal(new GradeTerm(expectedSemester, expectedYear), GradeTerm.Of(GradeElements.Create("Matematyka", "5", date, semester: semester)));
 }

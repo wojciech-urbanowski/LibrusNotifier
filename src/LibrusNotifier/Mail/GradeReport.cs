@@ -12,17 +12,19 @@ namespace LibrusNotifier.Mail;
 public sealed record GradeReportRow(string Date, string Mark, string Category, string Weight, bool Counts, bool IsCurrent);
 
 /// <summary>
-/// Raport pod powiadomieniem o nowej ocenie: wszystkie oceny z tego samego przedmiotu, od najnowszej do najstarszej
+/// Raport pod powiadomieniem o nowej ocenie: oceny z tego samego przedmiotu i semestru, od najnowszej do najstarszej
 /// (po dacie oceny, przy tej samej dacie – od ostatnio wykrytej).
 /// </summary>
-public sealed record GradeReport(string Subject, IReadOnlyList<GradeReportRow> Rows)
+/// <param name="Semester">Semestr nowej oceny (1 albo 2); <c>null</c>, gdy go nie ma w danych oceny.</param>
+public sealed record GradeReport(string Subject, int? Semester, IReadOnlyList<GradeReportRow> Rows)
 {
     /// <param name="current">Ocena, której dotyczy powiadomienie; jest w raporcie zawsze, także gdy brak jej na liście <paramref name="grades"/>.</param>
-    /// <param name="grades">Oceny z tego przedmiotu (wybór: <see cref="GradeHistory.ForSubject"/>).</param>
+    /// <param name="grades">Oceny z tego przedmiotu i okresu (wybór: <see cref="GradeHistory.ForSubject"/>).</param>
     /// <returns><c>null</c>, gdy ocena nie ma przedmiotu.</returns>
     public static GradeReport? Build(ElementEntity current, IEnumerable<ElementEntity> grades)
     {
-        var subject = TrackedElements.Fields(current).GetValueOrDefault("Przedmiot", "");
+        var currentFields = TrackedElements.Fields(current);
+        var subject = currentFields.GetValueOrDefault("Przedmiot", "");
         if (subject.Length == 0) return null;
 
         var all = grades.Where(g => g.Key != current.Key).Append(current);
@@ -40,6 +42,6 @@ public sealed record GradeReport(string Subject, IReadOnlyList<GradeReportRow> R
                 x.Fields.GetValueOrDefault("Liczona do średniej", "tak") != "nie",
                 x.Element.Key == current.Key))
             .ToList();
-        return new GradeReport(subject, rows);
+        return new GradeReport(subject, GradeTerm.Of(currentFields).Semester, rows);
     }
 }

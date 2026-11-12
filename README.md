@@ -106,9 +106,10 @@ Mail o nowej ocenie ma dodatkowo:
   1 – czerwony; sam „+” – miętowy odcień zieleni, sam „-” – łososiowy, pomiędzy pomarańczowym a czerwonym; „4+” i „3-”
   mają kolor swojej cyfry; inne oznaczenia, np. „nb”, „np”, „zw”, i oceny opisowe są szare; waga ma szarą czcionkę, żeby
   nie myliła się z oceną),
-- raport z listą wszystkich ocen z tego przedmiotu, od najnowszej do najstarszej (ocena z powiadomienia jest oznaczona
-  „(nowa)”). Raport powstaje z bazy; oceny, które zniknęły z listy w Librusie (np. poprawione), są pomijane, a uczeń widzi
-  w nim tylko oceny ze swojego konta.
+- raport z listą ocen z tego przedmiotu i z tego samego semestru, od najnowszej do najstarszej (ocena z powiadomienia jest
+  oznaczona „(nowa)”, a nagłówek podaje numer semestru). Po starcie nowego semestru lub roku szkolnego raport zaczyna się
+  od nowa: nie zawiera ocen z poprzedniego semestru ani z poprzedniego roku. Raport powstaje z bazy; oceny, które zniknęły
+  z listy w Librusie (np. poprawione), są pomijane, a uczeń widzi w nim tylko oceny ze swojego konta.
 
 ### Szczegóły implementacji
 

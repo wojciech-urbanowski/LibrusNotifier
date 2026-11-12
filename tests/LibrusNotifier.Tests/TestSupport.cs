@@ -178,13 +178,16 @@ internal sealed class TestDatabase : IDisposable
 
 internal static class Items
 {
-    public static ObservedItem Grade(string subject, string mark, string date = "2026-11-10") =>
+    public static ObservedItem Grade(string subject, string mark, string date = "2026-11-10", int semester = 1) =>
         LibrusLists.FromGrades(new LibrusApixNet.GradesResult(
-            [new Dictionary<string, List<LibrusApixNet.Grade>>
-            {
-                [subject] = [new LibrusApixNet.Grade(subject, mark, true, date, "/grade/1", $"Ocena: {mark}\nPrzedmiot: {subject}\nKomentarz: dobrze", 1, "Kartkówka", "Anna Nowak", 2)]
-            }, []],
+            [semester == 1 ? Semester(subject, mark, date, 1) : [], semester == 2 ? Semester(subject, mark, date, 2) : []],
             [], [[], []]))[0];
+
+    private static Dictionary<string, List<LibrusApixNet.Grade>> Semester(string subject, string mark, string date, int semester) =>
+        new()
+        {
+            [subject] = [new LibrusApixNet.Grade(subject, mark, true, date, "/grade/1", $"Ocena: {mark}\nPrzedmiot: {subject}\nKomentarz: dobrze", semester, "Kartkówka", "Anna Nowak", 2)]
+        };
 
     public static ObservedItem Message(string author, string title, string href, string date = "2026-11-10 12:00") =>
         LibrusLists.FromMessages([new LibrusApixNet.Message(author, title, date, href, true, false)])[0];
