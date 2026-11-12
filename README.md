@@ -60,6 +60,15 @@ schtasks /Create /TN "LibrusNotifier" /SC DAILY /ST 00:05 /TR "C:\LibrusNotifier
 - Log wymienia nazwy (bez wartości) ciasteczek ustawianych przez serwer, a przy odpowiedziach z błędem HTTP także
   nazwy wysłanych ciasteczek i początek treści odpowiedzi – pomaga to diagnozować odrzucone logowania.
 - Najwyżej 20 maili na cykl; niewysłane czekają na kolejne pingi (od najstarszych).
+- Zmiany terminu i usunięcia (terminarz, plan lekcji, zadania domowe): wpis, który zniknął z list kont, a ma dzisiejszą lub
+  przyszłą datę, jest zgłaszany. Gdy w tym samym cyklu pojawił się wpis o tej samej treści i innej dacie, przychodzi jeden
+  mail „Zmiana terminu” zamiast „nowy wpis”; w pozostałych przypadkach „Usunięto …” (z podpowiedzią o możliwym przeniesieniu,
+  gdy da się ją ustalić). Szczegóły w sekcji 6 specyfikacji.
+- Zestawienia dzienne (sekcja 8 specyfikacji): o 6:30 w dni nauki lista „Dzisiaj” i kolejnych wydarzeń, o 15:00 lista „Jutro”
+  (albo pierwszego dnia nauki po wolnym) i kolejnych; w wakacje i ferie popołudniowe tylko wtedy, gdy są przyszłe
+  wydarzenia. Powstają wyłącznie z danych w bazie, bez żądań do Librusa. Rodzaje wydarzeń mają pastelowe kolory
+  (sprawdzian – czerwony mocniejszy, kartkówka – czerwony lżejszy, zadanie domowe – fioletowy, zastępstwo – zielony,
+  odwołane zajęcia – pomarańczowy, dzień wolny – niebieski, wydarzenie – żółty, inne – szary).
 - Administratorzy (`[odbiorcy_log]`) dostają natychmiast pierwsze wystąpienie każdego błędu krytycznego w danym dniu
   oraz podsumowanie dnia (liczba pingów, żądań HTTP łącznie i na konto, nowości, maili, błędów).
 

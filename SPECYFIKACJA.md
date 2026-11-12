@@ -121,27 +121,72 @@ W obrębie jednego cyklu aplikacja używa ponownie tokenu, zamiast logować się
 ### Semestr i rok szkolny
 
 - Klucz elementu nie zawiera numeru semestru, więc zmiana semestru nie powoduje ponownych powiadomień. Nowe oceny semestralne i roczne są zwykłymi nowymi elementami.
-- Zmiana roku szkolnego nie wymaga osobnej obsługi: ponieważ zniknięcia elementów są ignorowane, czyszczenie danych przez Librus nie wywołuje powiadomień, a dane nowego roku są zwykłymi nowymi elementami. Stare wpisy zostają w bazie.
+- Zmiana roku szkolnego nie wymaga osobnej obsługi: ponieważ wpisy z datą w przeszłości są ignorowane przy wykrywaniu zniknięć (patrz „Zmiany terminu i usunięcia”), czyszczenie danych przez Librus nie wywołuje powiadomień, a dane nowego roku są zwykłymi nowymi elementami. Stare wpisy zostają w bazie.
 
 ### Baza i deduplikacja
 
 - Każdy element ma klucz wyliczony z treści (typ + kluczowe pola, np. przedmiot, data, treść, w postaci skrótu), niezależny od identyfikatorów konta. Ten sam element z obu kont ma więc jeden wpis; zapisywane jest, z których kont jest widoczny.
 - Dla każdego elementu i grupy odbiorców (rodzice, uczeń) zapisywane jest, czy powiadomienie zostało wysłane, żeby nie wysłać go drugi raz.
-- **Schemat:** tabela `Elements` (typ, klucz, dane w JSON, konta widoczności, daty pierwszego i ostatniego wykrycia) oraz tabela `Notifications` (element, grupa odbiorców, status wysyłki).
+- **Schemat:** tabela `Elements` (typ, klucz, dane w JSON, konta widoczności, daty pierwszego i ostatniego wykrycia), tabela `Notifications` (element, grupa odbiorców, rodzaj: nowy / zmiana terminu / usunięcie, powiązany element, status wysyłki), tabela `Baselines` (konto, moduł, czas pierwszego i ostatniego udanego pobrania listy) oraz tabela `DigestLogs` (wysłane zestawienia dzienne, patrz sekcja 8).
+- **Ostatnie pobranie listy:** każde udane pobranie listy modułu z konta zapisuje ten sam znacznik czasu w `Baselines.LastFetchUtc` i w `LastSeenUtc` elementów widzianych na liście. Element, którego `LastSeenUtc` jest starszy niż ostatnie pobranie listy z kont, na których był widoczny, zniknął z listy. Na tej podstawie działa wykrywanie zmian terminu i usunięć (niżej), a zestawienia dzienne pomijają takie elementy. W `Elements.GoneHandledUtc` zapisywane jest, że zniknięcie już obsłużono; ponowne pojawienie się elementu na liście czyści znacznik.
 - **Pierwsze uruchomienie** (pusta baza) robi pełny przegląd list i tylko zapisuje dotychczasowe dane, bez powiadomień.
 - **`--run-once`** wykonuje ping i pełny przegląd list (licznik pingów w pamięci nie ma historii); powiadomienia wysyłane są normalnie.
-- **Edycje i usunięcia nie są śledzone.** Element o nowym kluczu jest nowością, także gdy w Librusie jest to edycja istniejącego (np. zmieniona data wydarzenia): wysyłane jest powiadomienie „nowy”, a w bazie zostaje stary wpis. Zniknięcie elementu z listy jest ignorowane.
+- **Edycje i usunięcia.** Element o nowym kluczu jest nowością, także gdy w Librusie jest to edycja istniejącego (np. zmieniona data wydarzenia), a w bazie zostaje stary wpis. Dla terminarza, zmian planu lekcji i zadań domowych zniknięcie starego wpisu jest wykrywane i zgłaszane (następny punkt). Dla pozostałych typów (oceny, wiadomości, ogłoszenia, frekwencja, zrealizowane lekcje) zniknięcie z listy jest ignorowane.
+
+### Zmiany terminu i usunięcia
+
+Po sprawdzeniu kont, przed wysyłką powiadomień, aplikacja porównuje, co zniknęło z list terminarza, planu lekcji i zadań domowych.
+
+- **Zniknięcie wpisu.** Wpis zniknął, gdy żadne z kont, na których był widoczny, nie wymienia go w swoim ostatnim pobraniu listy (`LastSeenUtc` starsze niż najstarsze z tych pobrań). Wniosek o zniknięciu wymaga więc, by każde takie konto pobrało listę po ostatnim zobaczeniu wpisu: konto, które nie loguje się lub nie pobiera listy, wstrzymuje wniosek, a wpis widoczny tylko na jednym koncie nie jest „usuwany” przez listę drugiego.
+- **Ograniczenie do dziś i przyszłości.** Pod uwagę brane są wyłącznie wpisy z dzisiejszą lub późniejszą datą (zadanie domowe: termin wykonania), żeby przesuwające się okna list (terminarz: bieżący i następny miesiąc, plan lekcji: bieżący tydzień) nie wywoływały fałszywych alarmów. Zniknięcia wpisów z przeszłości są oznaczane po cichu. Lista zadań domowych sięga tylko 7 dni wstecz, więc zadania są oceniane, tylko jeśli udostępniono je w ostatnich 7 dniach.
+- **Zmiana terminu.** Jedno zniknięcie i jeden nowy, jeszcze niewysłany wpis tego samego typu o tej samej treści, ale innej dacie, to zmiana terminu. Treść to: terminarz – przedmiot, tytuł i opis (lekcja, godzina i nauczyciel mogą się zmienić razem z datą); zadanie domowe – wszystko poza terminem wykonania. Nowy wpis dostaje wtedy powiadomienie „zmiana terminu” zamiast „nowy”, a zniknięty nie dostaje żadnego. Zmiana opisu razem z datą nie jest rozpoznawana: przychodzą wtedy dwa maile, „nowy” i „usunięty”. Zmiany planu lekcji oraz zastępstwa i odwołania z numerem lekcji w treści oraz wpisy szkoły na cały dzień nie są łączone w pary.
+- **Usunięcie.** Zniknięcie bez pary daje powiadomienie „usunięto” (dotyczy wszystkich trzech typów: terminarz, w tym zastępstwa, odwołania i dni wolne, plan lekcji i zadania domowe). Gdy istnieje dokładnie jeden inny, już zgłoszony wpis o tej samej treści i innej dacie, mail wspomina o możliwym przeniesieniu na niego. Gdy wpis zniknął, zanim wysłano o nim powiadomienie „nowy”, nic nie jest wysyłane.
+- **Adresaci.** Jak przy nowych wpisach: rodzice zawsze, uczeń, jeśli wpis był widoczny na jego koncie. Każde zniknięcie jest zgłaszane najwyżej raz (także gdy wpis wróci i zniknie ponownie).
+- **Zabezpieczenie.** Gdy w jednym cyklu znika więcej niż 20 wpisów, aplikacja uznaje to za błąd listy: nie wysyła nic, zapisuje ostrzeżenie w logu, a wpisy, które wrócą na listę, są traktowane jak zwykle.
 
 ## 7. Powiadomienia e-mail
 
 - **Adresaci:** rodzice dostają sumę danych z obu kont; uczeń tylko elementy widoczne na jego koncie.
-- **Format:** osobny mail na każdy nowy element, z tematem opisującym element, np. nową ocenę z matematyki.
+- **Format:** osobny mail na każdy nowy element, z tematem opisującym element, np. nową ocenę z matematyki. Osobne maile o zmianie terminu (`[Librus] Zmiana terminu: Sprawdzian – Język niemiecki, z 2026-11-17 … na 2026-11-20 …`) i o usunięciu wpisu (`[Librus] Usunięto z terminarza: …`, `… zmianę w planie lekcji: …`, `… zadanie domowe: …`) mają tę samą budowę (tabela pól elementu) z dodatkowymi polami „Zmiana terminu” albo „Status” i „Możliwe przeniesienie” na początku.
 - **Treść:** mail jest w HTML-u (multipart/alternative z wersją tekstową jako zapasową). Pola elementu (`etykieta: wartość`) są tabelą HTML, szczegóły (np. treść wiadomości) osobną tabelą; wartości z Librusa są kodowane, nigdy nie trafiają do HTML-a jako znaczniki. Maile do administratorów (podsumowanie dnia, błędy) pozostają czystym tekstem.
 - **Daty względem dzisiaj:** każda data `rrrr-mm-dd` (z godziną lub bez) w temacie i treści powiadomienia dostaje w nawiasie dzień tygodnia i odległość od dnia wysyłki, np. `2026-11-13 (piątek, jutro)`: `dziś`, `jutro`, `pojutrze`, `za N dni`, a dla przeszłości `wczoraj`, `przedwczoraj`, `N dni temu`. W wersji HTML data wraz z opisem jest pogrubiona, gdy dotyczy dziś, jutra albo – gdy dziś jest dniem wolnym (weekend, święto, ferie) – pierwszego dnia szkolnego po wolnym; tekst i temat nie mają pogrubień. Bez opisu zostają daty techniczne: „Wykryto” i pole „Data dodania”; w HTML-u „Data dodania” jest dodatkowo szara, żeby nie mylić jej z datą, której dotyczy powiadomienie.
-- **Limit:** w jednym cyklu wysyłanych jest najwyżej 20 maili (łącznie dla wszystkich grup odbiorców), by nie przekroczyć limitów Gmaila. Pozostałe elementy zostają niewysłane i trafiają w kolejnych pingach, od najstarszych.
+- **Limit:** w jednym cyklu wysyłanych jest najwyżej 20 maili (łącznie dla wszystkich grup odbiorców i wszystkich rodzajów powiadomień), by nie przekroczyć limitów Gmaila. Pozostałe elementy zostają niewysłane i trafiają w kolejnych pingach, od najstarszych.
 - **Błędy wysyłki:** znacznik „wysłano” jest ustawiany dopiero po udanej wysyłce. Niewysłane elementy są ponawiane w każdym kolejnym pingu, także gdy liczniki są zerowe. Administratorzy (`[odbiorcy_log]`) są informowani o błędzie, o ile mail da się wysłać.
 
-## 8. Harmonogram odpytywania
+## 8. Zestawienia dzienne
+
+Dwa razy dziennie aplikacja wysyła mail z chronologiczną listą nadchodzących wydarzeń. Zestawienia dostają rodzice oraz uczeń (o ile `[odbiorcy_uczen]` nie jest pusta); uczeń widzi tylko wydarzenia z elementów widocznych na jego koncie.
+
+- **Dane tylko z bazy.** Zestawienie powstaje z elementów już zapisanych przez pingi (typy `terminarz`, `zmiana_planu`, `zadanie_domowe`). Nie wykonuje żadnych żądań do Librusa i nie wymusza pinga; aktualność danych to czas ostatniego pobrania listy, podany na dole maila („Stan danych z Librusa”).
+- **Terminy** (stałe, czas Europe/Warsaw, nie podlegają konfiguracji):
+
+| Zestawienie | Kiedy | Pierwsza sekcja | Warunek wysyłki |
+| --- | --- | --- | --- |
+| Poranne | 6:30, tylko w dni nauki (pn–pt poza świętami, feriami i wakacjami) | „Dzisiaj” – lista do odhaczania | zawsze, także gdy na dziś nic nie ma |
+| Popołudniowe | 15:00, codziennie | „Jutro” – lista do odhaczania | w ciągu roku zawsze; w wakacje i ferie tylko gdy jest jakiekolwiek wydarzenie po dzisiejszym dniu |
+
+- **Jutro wolne (popołudniowe).** Gdy jutro nie ma nauki (weekend, święto, ferie, wakacje), zamiast „Jutro” pierwszą, wyróżnioną sekcją jest pierwszy dzień nauki po wolnym: „Poniedziałek” po zwykłym weekendzie, w pozostałych przypadkach z datą, np. „Wtorek, 2.11.2027”. Nad sekcjami jest baner z powodem wolnego. Dopiero po niej idzie lista kolejnych wydarzeń.
+- **Kolejne wydarzenia.** Wszystkie wydarzenia po dzisiejszym dniu (poza dniem sekcji głównej), chronologicznie i pogrupowane po dniach; zakres wyznacza to, co jest w bazie (terminarz: bieżący i następny miesiąc). Sekcje bez wydarzeń zostają w mailu z krótkim komunikatem.
+- **Rodzaje i kolory.** Pole z typem wydarzenia ma pastelowe tło i ciemny tekst (czytelne w jasnym i ciemnym motywie klienta poczty); pod listą jest legenda użytych kolorów.
+
+| Rodzaj | Rozpoznanie | Kolor |
+| --- | --- | --- |
+| Sprawdzian | terminarz: sprawdzian, praca klasowa, klasówka, egzamin, test | czerwony, mocniejszy (`#f28b82`, tekst pogrubiony) |
+| Kartkówka | terminarz: kartkówka | czerwony, lżejszy (`#fad0cc`) |
+| Zadanie domowe | zadania domowe (termin wykonania) i wpisy terminarza „zadanie domowe” | fioletowy (`#d9c4f2`) |
+| Zastępstwo | terminarz „Zastępstwo z …” i zmiana planu „zastępstwo” | zielony (`#b9e4c4`) |
+| Odwołane zajęcia | terminarz „Odwołane zajęcia” i zmiana planu „odwołane” | pomarańczowy (`#ffd7a8`) |
+| Dzień wolny | zmiana planu „dzień wolny szkoły”, nazwa z „dzień wolny”, wpis szkoły na cały dzień w dniu bez nauki | niebieski (`#bcd9f5`) |
+| Wydarzenie | wycieczka, zebranie, apel, konkurs itp.; wpis szkoły na cały dzień w dniu nauki | żółty (`#fff0a8`) |
+| Inne | pozostałe wpisy terminarza i zmiany planu | szary (`#e2e2e2`) |
+
+- **Duplikaty.** To samo zastępstwo, odwołanie, zadanie domowe lub dzień wolny bywa jednocześnie w terminarzu i na innej liście; w zestawieniu jest jednym wierszem (z planu lekcji: godziny i dane zmiany; z zadań domowych: temat; dzień wolny z terminarza ma nazwę).
+- **Edycje i usunięcia.** Zestawienie pomija elementy terminarza i planu lekcji, które zniknęły z ostatnio pobranej listy (sekcja 6), więc sprawdzian przeniesiony na inny dzień nie występuje dwa razy; o samej zmianie informuje osobny mail (sekcja 6, „Zmiany terminu i usunięcia”). Zestawienie jest przy tym ostrzejsze niż powiadomienie: ukrywa wpis już wtedy, gdy zniknął z listy jednego z kont, nie czekając, aż pobiorą ją oba. Zadania domowe tej reguły nie dotyczy: lista obejmuje tylko ostatnie 7 dni, a termin może być dalszy.
+- **Temat maila:** `[Librus] Zdarzenia na dziś, czwartek 2026-11-12: 2 (sprawdzian, zastępstwo); kolejne: 4`, analogicznie „na jutro, piątek …” i „na poniedziałek 2026-11-16 …” (rodzaje wydarzeń pierwszej sekcji od najważniejszego).
+- **Wysyłka.** Terminy są sprawdzane co najwyżej co minutę w pętli pingów, więc zestawienie wychodzi punktualnie, a w trakcie pinga zaraz po nim. Wysłane zestawienie jest zapisywane w `DigestLogs` (dzień, rodzaj, grupa), więc restart aplikacji nie powoduje ponownej wysyłki. Zestawienie, którego termin minął podczas przerwy w pracy, jest wysyłane jeszcze przez 2 godziny, później pomijane (wpis w logu). Po błędzie wysyłki aplikacja ponawia próbę co 5 minut w tym samym oknie 2 godzin, a administratorzy dostają mail o błędzie. Zestawienia nie wchodzą w limit maili na cykl.
+- **Poza zakresem.** `--run-once` nie wysyła zestawień. Dni wolne ustalone przez szkołę (np. dni dyrektorskie) są dla kalendarza dniami nauki, więc poranne zestawienie wyjdzie też w takim dniu (patrz sekcja 9).
+
+## 9. Harmonogram odpytywania
 
 Harmonogram jest stały, zakodowany w aplikacji i nie podlega konfiguracji.
 
@@ -166,7 +211,7 @@ Harmonogram jest stały, zakodowany w aplikacji i nie podlega konfiguracji.
 - **Odchylenie:** „+” oznacza wyłącznie dodatnie, „±” symetryczne odchylenie od interwału.
 - **Ferie i wakacje** pochodzą z lokalnego cache na dysku (w `data`), odświeżanego z OpenHolidays API co dobę. Gdy API jest niedostępne, używany jest istniejący cache; gdy go brak, ferie i wakacje są pomijane (liczą się tylko weekendy i święta), a aplikacja zapisuje ostrzeżenie w logu.
 
-## 9. Cykl dobowy
+## 10. Cykl dobowy
 
 - Przy starcie aplikacja zapamiętuje w pamięci procesu (nie w bazie) bieżący dzień kalendarzowy i obsługuje zadania tylko do końca tego dnia.
 - Przed każdym żądaniem do Librusa i po jego zakończeniu sprawdza, czy dzień się zmienił; jeśli tak, kończy działanie.
@@ -174,14 +219,14 @@ Harmonogram jest stały, zakodowany w aplikacji i nie podlega konfiguracji.
 - Gdy do końca dnia nie ma już żadnego okna, aplikacja wysyła podsumowanie dnia i kończy działanie od razu (nie czeka do północy).
 - `--run-once` ignoruje okna harmonogramu i kończy działanie po jednym cyklu.
 
-## 10. Logowanie
+## 11. Logowanie
 
 - **Błędy Librusa** (logowanie, sieć, odpowiedź serwera): bieżące sprawdzenie danego konta jest przerywane bez ponowień w tym samym cyklu, a kolejna próba następuje w następnym pingu. Konta rodzica i ucznia są niezależne: błąd jednego nie wstrzymuje drugiego.
 - **Żądania do Librusa:** każde żądanie HTTP jest zapisywane w logu lokalnym (czas, konto rodzica/ucznia, metoda, ścieżka bez ciasteczek, tokenów i danych logowania, kod odpowiedzi, czas trwania), żeby można było wykryć nadmierne odpytywanie serwisu. Podsumowanie dnia dla administratorów zawiera liczbę żądań, łącznie i na konto.
 - **Log lokalny:** wypis na konsolę i plik dzienny w `data/logs` (poziomy info i błąd, bez haseł i tokenów); pliki starsze niż 30 dni są usuwane.
-- **Log do administratorów** (`[odbiorcy_log]`): podsumowanie dnia wysyłane przy zakończeniu działania (zmiana dnia lub `--run-once`) oraz natychmiastowy mail przy błędzie krytycznym (np. błąd logowania, brak dostępu do Librusa, nieudana wysyłka). Ten sam błąd w ciągu dnia jest zgłaszany natychmiast tylko raz.
+- **Log do administratorów** (`[odbiorcy_log]`): podsumowanie dnia (m.in. liczba wysłanych zestawień dziennych oraz wykrytych zmian terminu i usunięć) wysyłane przy zakończeniu działania (zmiana dnia lub `--run-once`) oraz natychmiastowy mail przy błędzie krytycznym (np. błąd logowania, brak dostępu do Librusa, nieudana wysyłka). Ten sam błąd w ciągu dnia jest zgłaszany natychmiast tylko raz.
 
-## 11. Do ustalenia przy implementacji
+## 12. Do ustalenia przy implementacji
 
 - Pola kluczowe i dane JSON dla poszczególnych typów elementów.
 - Szablony i tematy maili dla poszczególnych typów.

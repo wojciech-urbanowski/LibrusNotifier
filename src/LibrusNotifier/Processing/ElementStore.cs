@@ -46,6 +46,7 @@ public sealed class ElementStore(NotifierDbContext db, Clock clock, bool student
             if (existing.TryGetValue(key, out var element))
             {
                 element.LastSeenUtc = now;
+                element.GoneHandledUtc = null; // wrócił na listę (albo nigdy z niej nie zniknął)
                 if (element.IsVisibleTo(account)) continue;
                 element.MarkVisibleTo(account);
                 if (!baseline && account == AccountKind.Student && AddNotification(element, RecipientGroup.Student, now)) newForStudent++;
@@ -69,7 +70,11 @@ public sealed class ElementStore(NotifierDbContext db, Clock clock, bool student
             created.Add((element, item));
         }
 
-        if (baseline) db.Baselines.Add(new BaselineEntity { Account = account, Module = module, CompletedUtc = now });
+        // Ten sam znacznik czasu dostają widziane elementy (LastSeenUtc) i pobranie listy: element, którego LastSeenUtc
+        // jest starszy niż ostatnie pobranie, zniknął z listy (patrz DigestEventSource).
+        var fetch = await db.Baselines.FirstOrDefaultAsync(b => b.Account == account && b.Module == module, ct);
+        if (fetch is null) db.Baselines.Add(new BaselineEntity { Account = account, Module = module, CompletedUtc = now, LastFetchUtc = now });
+        else fetch.LastFetchUtc = now;
         await db.SaveChangesAsync(ct);
         return new ApplyResult(baseline, items.Count, created, newForStudent);
     }
@@ -83,7 +88,7 @@ public sealed class ElementStore(NotifierDbContext db, Clock clock, bool student
     private bool AddNotification(ElementEntity element, RecipientGroup group, DateTime now)
     {
         if (group == RecipientGroup.Student && !studentNotificationsEnabled) return false;
-        if (element.Notifications.Any(n => n.Group == group)) return false;
+        if (element.Notifications.Any(n => n.Group == group && n.Kind != NotificationKind.Removed)) return false;
         element.Notifications.Add(new NotificationEntity { Group = group, Status = NotificationStatus.Pending, CreatedUtc = now });
         return true;
     }

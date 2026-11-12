@@ -16,7 +16,10 @@ public sealed record DailyStatsSnapshot(
     IReadOnlyDictionary<AccountKind, int> Logins,
     IReadOnlyDictionary<string, int> NewElements,
     int BaselineElements,
+    int MovedElements,
+    int RemovedElements,
     IReadOnlyDictionary<RecipientGroup, int> MailsSent,
+    IReadOnlyDictionary<RecipientGroup, int> DigestsSent,
     int MailFailures,
     int AdminMails,
     IReadOnlyList<ProblemSummary> Problems)
@@ -35,10 +38,13 @@ public sealed class DailyStats(DateOnly day, DateTime startedLocal)
     private readonly Dictionary<AccountKind, int> _logins = [];
     private readonly Dictionary<string, int> _newElements = new(StringComparer.Ordinal);
     private readonly Dictionary<RecipientGroup, int> _mailsSent = [];
+    private readonly Dictionary<RecipientGroup, int> _digestsSent = [];
     private readonly List<ProblemSummary> _problems = [];
     private int _pings;
     private int _fullReviews;
     private int _baselineElements;
+    private int _movedElements;
+    private int _removedElements;
     private int _mailFailures;
     private int _adminMails;
 
@@ -76,6 +82,16 @@ public sealed class DailyStats(DateOnly day, DateTime startedLocal)
         lock (_gate) _newElements[type] = _newElements.GetValueOrDefault(type) + count;
     }
 
+    /// <summary>Wykryte zmiany terminu i usunięcia wpisów (powiadomienia utworzone w cyklu).</summary>
+    public void RecordChanges(int moved, int removed)
+    {
+        lock (_gate)
+        {
+            _movedElements += moved;
+            _removedElements += removed;
+        }
+    }
+
     public void RecordBaseline(int count)
     {
         lock (_gate) _baselineElements += count;
@@ -88,6 +104,12 @@ public sealed class DailyStats(DateOnly day, DateTime startedLocal)
             if (success) _mailsSent[group] = _mailsSent.GetValueOrDefault(group) + 1;
             else _mailFailures++;
         }
+    }
+
+    /// <summary>Wysłane dzienne zestawienie wydarzeń (nie wlicza się do powiadomień o nowościach).</summary>
+    public void RecordDigest(RecipientGroup group)
+    {
+        lock (_gate) _digestsSent[group] = _digestsSent.GetValueOrDefault(group) + 1;
     }
 
     public void RecordAdminMail()
@@ -111,8 +133,9 @@ public sealed class DailyStats(DateOnly day, DateTime startedLocal)
         {
             return new DailyStatsSnapshot(day, startedLocal, _pings, _fullReviews,
                 new Dictionary<AccountKind, int>(_requests), new Dictionary<AccountKind, int>(_failedRequests),
-                new Dictionary<AccountKind, int>(_logins), new Dictionary<string, int>(_newElements), _baselineElements,
-                new Dictionary<RecipientGroup, int>(_mailsSent), _mailFailures, _adminMails, _problems.ToList());
+                new Dictionary<AccountKind, int>(_logins), new Dictionary<string, int>(_newElements), _baselineElements, _movedElements, _removedElements,
+                new Dictionary<RecipientGroup, int>(_mailsSent), new Dictionary<RecipientGroup, int>(_digestsSent), _mailFailures, _adminMails,
+                _problems.ToList());
         }
     }
 }

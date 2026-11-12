@@ -4,6 +4,7 @@ using System.Text;
 using LibrusNotifier.Calendar;
 using LibrusNotifier.Configuration;
 using LibrusNotifier.Data;
+using LibrusNotifier.Digest;
 using LibrusNotifier.Librus;
 using LibrusNotifier.Logging;
 using LibrusNotifier.Mail;
@@ -166,7 +167,9 @@ public static class App
             else
             {
                 var scheduler = new PollingScheduler(day, PollingPlan.ForDay(dayInfo), Random.Shared);
-                await new PingLoop(scheduler, cycle, clock, dayGuard, log, admin).RunAsync();
+                var digest = new DigestService(sender, config.ParentRecipients, config.StudentRecipients, () => NotifierDbContext.Create(paths.DatabaseFile),
+                    calendar, clock, log, admin, stats);
+                await new PingLoop(scheduler, cycle, clock, dayGuard, log, admin, digest: digest).RunAsync();
             }
         }
         catch (OperationCanceledException) when (dayGuard.DayChanged)

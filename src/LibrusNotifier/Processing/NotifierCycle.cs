@@ -76,6 +76,7 @@ public sealed class NotifierCycle
             }
 
             await using var db = _dbFactory();
+            await DetectChangesAsync(db, cancellationToken);
             try
             {
                 await _dispatcher.DispatchAsync(db, cancellationToken);
@@ -89,6 +90,24 @@ public sealed class NotifierCycle
         finally
         {
             await _sender.CloseAsync();
+        }
+    }
+
+    /// <summary>
+    /// Zmiany terminu i usunięcia (po sprawdzeniu kont, przed wysyłką, żeby zmiana terminu wyszła jednym mailem zamiast „nowy wpis”).
+    /// Błąd wykrywania nie wstrzymuje wysyłki zwykłych powiadomień.
+    /// </summary>
+    private async Task DetectChangesAsync(NotifierDbContext db, CancellationToken ct)
+    {
+        try
+        {
+            var result = await new ChangeDetector(db, _clock, _log, _studentNotifications).DetectAsync(ct);
+            _stats.RecordChanges(result.Moved, result.Removed);
+        }
+        catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _log.Error($"Błąd wykrywania zmian na listach: {e}");
+            await _admin.ReportCriticalAsync($"changes|{e.GetType().FullName}|{e.Message}", "błąd wykrywania zmian na listach", $"Błąd: {e.Message}");
         }
     }
 
