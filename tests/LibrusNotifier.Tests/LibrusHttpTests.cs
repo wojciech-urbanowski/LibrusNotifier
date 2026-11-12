@@ -221,6 +221,38 @@ public sealed class LibrusHttpTests
         Assert.DoesNotContain(lines, l => l.Contains("tajne"));
     }
 
+    [Fact]
+    public async Task RequestsIntroduceThemselvesAsFirefoxUnlessHeaderAlreadySet()
+    {
+        var log = new ListLog();
+        var clock = new FakeClock(new DateTime(2026, 11, 12, 10, 0, 0));
+        using var guard = new DayGuard(clock, clock.Today, CancellationToken.None);
+        var seen = new List<(string? UserAgent, string? Language)>();
+        var inner = new MockHandler(r => MockHandler.Html("ok"));
+        using var client = new HttpClient(new LibrusHttpHandler(new HeaderSpy(inner, seen), new CookieContainer(), AccountKind.Parent, log,
+            new DailyStats(clock.Today, clock.Now), guard, new SessionActivity(clock, TimeSpan.FromMinutes(9)), Throttles.None(clock)));
+
+        (await client.GetAsync("https://school.test/a")).Dispose();
+        using var own = new HttpRequestMessage(HttpMethod.Get, "https://school.test/b");
+        own.Headers.UserAgent.ParseAdd("Wlasny/2.0");
+        (await client.SendAsync(own)).Dispose();
+
+        Assert.Equal(BrowserIdentity.UserAgent, seen[0].UserAgent);
+        Assert.Equal(BrowserIdentity.AcceptLanguage, seen[0].Language?.Replace(" ", ""));
+        Assert.Equal("Wlasny/2.0", seen[1].UserAgent);
+        Assert.StartsWith("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:", BrowserIdentity.UserAgent);
+        Assert.EndsWith("Firefox/" + BrowserIdentity.FirefoxVersion, BrowserIdentity.UserAgent);
+    }
+
+    private sealed class HeaderSpy(HttpMessageHandler inner, List<(string? UserAgent, string? Language)> seen) : DelegatingHandler(inner)
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            seen.Add((request.Headers.UserAgent.ToString(), request.Headers.TryGetValues("Accept-Language", out var v) ? string.Join(",", v) : null));
+            return base.SendAsync(request, cancellationToken);
+        }
+    }
+
     private static HttpResponseMessage SetCookies(HttpResponseMessage response, params string[] values)
     {
         foreach (var value in values) response.Headers.Add("Set-Cookie", value);

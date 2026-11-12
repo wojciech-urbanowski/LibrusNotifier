@@ -90,6 +90,7 @@ public sealed partial class LibrusHttpHandler : DelegatingHandler
     private async Task<HttpResponseMessage> SendOnceAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         _dayGuard.Check();
+        BrowserIdentity.Apply(request.Headers);
         HttpResponseMessage response;
         var uri = request.RequestUri!;
         var loginStep = _loginSteps > 0;

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using LibrusNotifier.Librus;
 using LibrusNotifier.Logging;
 using LibrusNotifier.Timing;
 
@@ -72,7 +73,7 @@ public sealed class SchoolHolidayProvider(string cacheFile, Clock clock, IAppLog
         using var http = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: false);
         http.Timeout = TimeSpan.FromSeconds(30);
         http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("LibrusNotifier", "1.0"));
+        BrowserIdentity.Apply(http.DefaultRequestHeaders);
         var query = string.Create(CultureInfo.InvariantCulture,
             $"SchoolHolidays?countryIsoCode=PL&subdivisionCode={Uri.EscapeDataString(subdivisionCode)}&languageIsoCode=PL&validFrom={validFrom:yyyy-MM-dd}&validTo={validTo:yyyy-MM-dd}");
         using var response = await http.GetAsync(new Uri(BaseUrl, query), ct);
