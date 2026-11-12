@@ -20,6 +20,16 @@ public static class MailTemplates
     /// </summary>
     private static readonly HashSet<string> TechnicalDateLabels = new(StringComparer.OrdinalIgnoreCase) { "Data dodania" };
 
+    /// <summary>
+    /// Data nadania wiadomości jest czysto techniczna: dostaje tylko dzień tygodnia, bez „dziś/jutro” i bez pogrubienia
+    /// (ważne jest, o czym wiadomość, a nie kiedy ją wysłano).
+    /// </summary>
+    private static DateAnnotator.DateMode DateModeFor(string type, string label) =>
+        type == ElementTypes.Message && label == "Data" ? DateAnnotator.DateMode.WeekdayOnly : DateAnnotator.DateMode.Relative;
+
+    /// <summary>Tekst stopki każdego automatycznego maila, z numerem wersji aplikacji.</summary>
+    public static string FooterText => $"Wiadomość wysłana automatycznie przez LibrusNotifier {App.Version}.";
+
     /// <param name="calendar">Kalendarz szkolny do pogrubiania dat po dniach wolnych; bez niego liczą się tylko weekendy i święta.</param>
     /// <param name="kind">Rodzaj powiadomienia: nowy element, zmiana terminu (element zastąpił zniknięty) albo usunięcie.</param>
     /// <param name="related">Zmiana terminu: poprzedni element. Usunięcie: element, na który wpis prawdopodobnie przeniesiono (albo <c>null</c>).</param>
@@ -78,11 +88,11 @@ public static class MailTemplates
 
         var body = new StringBuilder();
         body.AppendLine(typeName).AppendLine();
-        foreach (var field in fields) AppendField(body, field, dates);
+        foreach (var field in fields) AppendField(body, field, dates, element.Type);
         if (extra.Count > 0)
         {
             body.AppendLine();
-            foreach (var field in extra) AppendField(body, field, dates);
+            foreach (var field in extra) AppendField(body, field, dates, element.Type);
         }
         else if (note is not null)
         {
@@ -94,12 +104,12 @@ public static class MailTemplates
             .AppendLine($"Wykryto: {detected}")
             .AppendLine()
             .AppendLine("-- ")
-            .AppendLine("Wiadomość wysłana automatycznie przez LibrusNotifier.");
+            .AppendLine(FooterText);
 
         // Opisy dat wchodzą do tematu przed ewentualnym skróceniem, które dotyka tekstu przed datą, a nie opisu.
         var subjectLine = CleanSubject(dates.PlainFitting(NormalizeSubject(subject), MaxSubjectLength));
         return new OutgoingMail(to, subjectLine, body.ToString(),
-            BuildHtml(subjectLine, typeName, fields, extra, note, visibility, detected, dates, MarkStyleFor(element.Type), report));
+            BuildHtml(subjectLine, typeName, fields, extra, note, visibility, detected, dates, MarkStyleFor(element.Type), report, element.Type));
     }
 
     /// <summary>Pola na początku maila o zmianie terminu lub usunięciu (przed polami samego elementu).</summary>
@@ -195,10 +205,11 @@ public static class MailTemplates
     /// <summary>
     /// Wersja HTML maila: pola jako prawdziwe tabele (etykieta w <c>&lt;th scope="row"&gt;</c>, wartość w <c>&lt;td&gt;</c>),
     /// szczegóły (np. treść wiadomości) w osobnej tabeli. Wszystkie wartości są kodowane, nic z Librusa nie trafia do HTML-a jako znacznik;
-    /// jedyne znaczniki, jakie dodajemy w wartościach, to <c>&lt;strong&gt;</c> wokół dat „na teraz” (dziś, jutro, pierwszy dzień po wolnym).
+    /// jedyne znaczniki, jakie dodajemy w wartościach, to <c>&lt;strong&gt;</c> wokół dat „na teraz” (dziś, jutro, pierwszy dzień po wolnym);
+    /// dat technicznych (<see cref="DateModeFor"/>) to nie dotyczy.
     /// </summary>
     private static string BuildHtml(string title, string typeName, IReadOnlyList<Field> fields, IReadOnlyList<Field> extra, string? note,
-        string visibility, string detected, DateAnnotator dates, Func<string, string>? markStyle, GradeReport? report)
+        string visibility, string detected, DateAnnotator dates, Func<string, string>? markStyle, GradeReport? report, string type)
     {
         var html = new StringBuilder();
         html.AppendLine("<!DOCTYPE html>")
@@ -212,8 +223,8 @@ public static class MailTemplates
             .AppendLine("</head>")
             .AppendLine($"<body style=\"{PageStyle}\">")
             .AppendLine($"<h1 style=\"{HeadingStyle}\">{Encode(typeName)}</h1>");
-        AppendFieldTable(html, fields, dates, markStyle);
-        AppendFieldTable(html, extra, dates);
+        AppendFieldTable(html, fields, dates, type, markStyle);
+        AppendFieldTable(html, extra, dates, type);
         if (note is not null) html.AppendLine($"<p><em>{Encode(note)}</em></p>");
         if (report is not null) AppendReportHtml(html, report);
         html.AppendLine($"<table style=\"{MetaTableStyle}\">")
@@ -222,7 +233,7 @@ public static class MailTemplates
             .AppendLine($"<tr><th scope=\"row\" style=\"{MetaCellStyle}font-weight:normal;\">Wykryto</th><td style=\"{MetaCellStyle}\">{Encode(detected)}</td></tr>")
             .AppendLine("</tbody>")
             .AppendLine("</table>")
-            .AppendLine("<p style=\"margin:12px 0 0;font-size:12px;color:#777777;\">Wiadomość wysłana automatycznie przez LibrusNotifier.</p>")
+            .AppendLine($"<p style=\"margin:12px 0 0;font-size:12px;color:#777777;\">{Encode(FooterText)}</p>")
             .AppendLine("</body>")
             .AppendLine("</html>");
         return html.ToString();
@@ -236,7 +247,7 @@ public static class MailTemplates
         _ => null
     };
 
-    private static void AppendFieldTable(StringBuilder html, IReadOnlyList<Field> fields, DateAnnotator dates, Func<string, string>? markStyle = null)
+    private static void AppendFieldTable(StringBuilder html, IReadOnlyList<Field> fields, DateAnnotator dates, string type, Func<string, string>? markStyle = null)
     {
         if (fields.Count == 0) return;
         html.AppendLine($"<table style=\"{TableStyle}\">").AppendLine("<tbody>");
@@ -244,7 +255,7 @@ public static class MailTemplates
         {
             // Data techniczna (kiedy wpis dodano) jest szara i bez opisu, żeby nie mylić jej z datą, której dotyczy powiadomienie.
             var technical = TechnicalDateLabels.Contains(field.Label);
-            var value = technical ? EncodeMultiline(field.Value) : dates.Html(field.Value);
+            var value = technical ? EncodeMultiline(field.Value) : dates.Html(field.Value, DateModeFor(type, field.Label));
             // Szara jest też waga: cyfra obok oceny łatwo się z nią myli. Etykieta i wartość są szare jak „Data dodania”.
             var muted = technical || field.Label == WeightLabel;
             var color = muted ? TechnicalColorStyle : markStyle is not null && field.Label == GradeLabel ? markStyle(field.Value) : "";
@@ -307,9 +318,9 @@ public static class MailTemplates
     private static string EncodeMultiline(string text) =>
         Encode(text.Replace("\r\n", "\n").Replace('\r', '\n')).Replace("\n", "<br>\n");
 
-    private static void AppendField(StringBuilder body, Field field, DateAnnotator dates)
+    private static void AppendField(StringBuilder body, Field field, DateAnnotator dates, string type)
     {
-        var value = TechnicalDateLabels.Contains(field.Label) ? field.Value : dates.Plain(field.Value);
+        var value = TechnicalDateLabels.Contains(field.Label) ? field.Value : dates.Plain(field.Value, DateModeFor(type, field.Label));
         if (value.Contains('\n'))
             body.AppendLine($"{field.Label}:").AppendLine(value.Replace("\r", "")).AppendLine();
         else

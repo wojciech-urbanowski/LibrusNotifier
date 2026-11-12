@@ -96,7 +96,7 @@ public static class DigestMailTemplates
         if (grades is not null) AppendGradesText(text, grades);
 
         if (dataAsOf is { } asOf) text.AppendLine($"Stan danych z Librusa: {asOf:yyyy-MM-dd HH:mm}");
-        text.AppendLine("-- ").AppendLine("Wiadomość wysłana automatycznie przez LibrusNotifier.");
+        text.AppendLine("-- ").AppendLine(MailTemplates.FooterText);
         return text.ToString();
     }
 
@@ -175,7 +175,7 @@ public static class DigestMailTemplates
         if (grades is not null) AppendGradesHtml(html, grades);
         html.AppendLine($"<p style=\"margin:16px 0 0;font-size:12px;{MutedStyle}\">" +
             (dataAsOf is { } asOf ? $"Stan danych z Librusa: {asOf:yyyy-MM-dd HH:mm}. " : "") +
-            "Wiadomość wysłana automatycznie przez LibrusNotifier.</p>")
+            Encode(MailTemplates.FooterText) + "</p>")
             .AppendLine("</body>")
             .AppendLine("</html>");
         return html.ToString();
