@@ -26,7 +26,8 @@ dotnet publish src/LibrusNotifier -c Release -r win-x64 --self-contained false -
    dotychczasowe dane, bez powiadomień.
 
 Konfiguracja i dane są w katalogu pliku wykonywalnego (niezależnie od katalogu roboczego); inny katalog wskazuje
-`--katalog <ścieżka>`. Baza: `data/librus.db`, logi dzienne: `data/logs`, cache ferii: `data/ferie_cache.json`.
+`--katalog <ścieżka>`. Baza: `data/librus.db`, kopie zapasowe bazy: `data/backups`, logi dzienne: `data/logs`,
+cache ferii: `data/ferie_cache.json`.
 
 ### Raspberry Pi (cron)
 
@@ -66,9 +67,18 @@ schtasks /Create /TN "LibrusNotifier" /SC DAILY /ST 00:05 /TR "C:\LibrusNotifier
   gdy da się ją ustalić). Szczegóły w sekcji 6 specyfikacji.
 - Zestawienia dzienne (sekcja 8 specyfikacji): o 6:30 w dni nauki lista „Dzisiaj” i kolejnych wydarzeń, o 15:00 lista „Jutro”
   (albo pierwszego dnia nauki po wolnym) i kolejnych; w wakacje i ferie popołudniowe tylko wtedy, gdy są przyszłe
-  wydarzenia. Powstają wyłącznie z danych w bazie, bez żądań do Librusa. Rodzaje wydarzeń mają pastelowe kolory
+  wydarzenia. Powstają wyłącznie z danych w bazie, bez żądań do Librusa, i zawsze po pingu: ping w toku jest dokańczany
+  (oba konta), a zestawienie zaległe po starcie aplikacji (także w nowej bazie) wychodzi po pierwszym pingu; po 15:00,
+  gdy dziś nic jeszcze nie wysłano, wychodzi tylko popołudniowe. Rodzaje wydarzeń mają pastelowe kolory
   (sprawdzian – czerwony mocniejszy, kartkówka – czerwony lżejszy, zadanie domowe – fioletowy, zastępstwo – zielony,
-  odwołane zajęcia – pomarańczowy, dzień wolny – niebieski, wydarzenie – żółty, inne – szary).
+  odwołane zajęcia – pomarańczowy, dzień wolny – niebieski, wydarzenie – żółty, inne – szary). Na końcu zestawienia jest
+  tabela ocen z bieżącego semestru: wiersze to przedmioty (alfabetycznie), kolumny to oceny (same wartości,
+  od najstarszej do najnowszej) w kolorach jak w mailu o nowej ocenie; w wakacje (lipiec, sierpień) tabeli nie ma.
+- Kopia zapasowa bazy: przy każdym starcie (przed migracją) powstaje `data/backups/librus-RRRR-MM-DD_GGmm.db` (czas
+  z dokładnością do minuty; jeśli plik o tej nazwie już jest, kopii się nie powtarza). Kopie starsze niż miesiąc są kasowane.
+  Nieudana kopia wstrzymuje kasowanie starych.
+- Vacuum bazy: na zakończenie działania w dni roku podzielne przez 10 (10., 20., 30. … dzień roku); wynik (rozmiar przed
+  i po, czas) jest na końcu podsumowania dnia dla administratorów.
 - Administratorzy (`[odbiorcy_log]`) dostają natychmiast pierwsze wystąpienie każdego błędu krytycznego w danym dniu
   oraz podsumowanie dnia (liczba pingów, żądań HTTP łącznie i na konto, nowości, maili, błędów).
 
@@ -91,8 +101,19 @@ kolejne numery wystąpienia.
 | `zrealizowana_lekcja` | zrealizowane lekcje | data, nr lekcji, przedmiot, nauczyciel, temat |
 
 `Elements.DataJson` zawiera wszystkie pola z listy (etykieta → wartość), `DetailsJson` – szczegóły do maila.
-Mail ma temat z prefiksem `[Librus]` opisujący element (np. `[Librus] Nowa ocena: Matematyka – 5`), a w treści
+Mail ma temat z prefiksem `[Librus]` opisujący element (np. `[Librus] Nowa ocena: Matematyka - 5`), a w treści
 wszystkie pola, szczegóły i informację, na którym koncie element jest widoczny.
+
+Mail o nowej ocenie ma dodatkowo:
+
+- pastelowe tło pola z oceną (6 – intensywny zielony, 5 – zielony, 4 – słaby zielony, 3 – żółty, 2 – pomarańczowy,
+  1 – czerwony; sam „+” – miętowy odcień zieleni, sam „-” – łososiowy, pomiędzy pomarańczowym a czerwonym; „4+” i „3-”
+  mają kolor swojej cyfry; inne oznaczenia, np. „nb”, „np”, „zw”, i oceny opisowe są szare; waga ma szarą czcionkę, żeby
+  nie myliła się z oceną),
+- raport z listą ocen z tego przedmiotu i z tego samego semestru, od najnowszej do najstarszej (ocena z powiadomienia jest
+  oznaczona „(nowa)”, a nagłówek podaje numer semestru). Po starcie nowego semestru lub roku szkolnego raport zaczyna się
+  od nowa: nie zawiera ocen z poprzedniego semestru ani z poprzedniego roku. Raport powstaje z bazy; oceny, które zniknęły
+  z listy w Librusie (np. poprawione), są pomijane, a uczeń widzi w nim tylko oceny ze swojego konta.
 
 ### Szczegóły implementacji
 

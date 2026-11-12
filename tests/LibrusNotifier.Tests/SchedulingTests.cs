@@ -22,6 +22,13 @@ public sealed class SchedulingTests
     }
 
     [Fact]
+    public void WindowDescriptionHasSpacesAroundRangeHyphen()
+    {
+        var window = new PollingWindow("Szkolny", TimeSpan.FromHours(6), TimeSpan.FromHours(16), TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(4), JitterMode.Symmetric);
+        Assert.Equal("Szkolny 06:00 - 16:00, co 15 min ±4 min", window.ToString());
+    }
+
+    [Fact]
     public void SchoolDayCoversWholeDayWithExpectedIntervals()
     {
         var scheduler = Scheduler(PollingPlan.School);

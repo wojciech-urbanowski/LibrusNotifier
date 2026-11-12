@@ -73,7 +73,7 @@ public static class DigestBuilder
                     ? $"{Short(first)} ({RelativePart(dates, first)}) · pierwszy dzień nauki po weekendzie"
                     : $"{RelativePart(dates, first)} · pierwszy dzień nauki po wolnym";
                 banner = $"Jutro ({DayName(tomorrow)}, {Short(tomorrow)}) nie ma nauki: {Reason(calendar.GetDay(tomorrow))}. " +
-                    $"Pierwszy dzień nauki to {DayName(first)}, {Short(first)} ({RelativePart(dates, first)}) – jego lista jest poniżej, jako pierwsza.";
+                    $"Pierwszy dzień nauki to {DayName(first)}, {Short(first)} ({RelativePart(dates, first)}) - jego lista jest poniżej, jako pierwsza.";
             }
         }
 

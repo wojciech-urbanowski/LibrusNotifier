@@ -151,7 +151,7 @@ public sealed class InfrastructureTests : IDisposable
 
         var mail = DailySummary.Build(stats.Snapshot(), "dzień szkolny", "zmiana dnia", new DateTime(2026, 11, 12, 23, 40, 0), 3, ["admin@example.com"]);
 
-        Assert.Equal("[LibrusNotifier] Podsumowanie dnia 2026-11-12 – błędy: 2", mail.Subject);
+        Assert.Equal("[LibrusNotifier] Podsumowanie dnia 2026-11-12 - błędy: 2", mail.Subject);
         Assert.Contains("Podsumowanie dnia 2026-11-12 (czwartek)", mail.Body);
         Assert.Contains("Żądania HTTP do Librusa: 3 (rodzic: 2, uczeń: 1)", mail.Body);
         Assert.Contains("w tym nieudanych: 1", mail.Body);

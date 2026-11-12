@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace LibrusNotifier.Data.Migrations
 {
     [DbContext(typeof(NotifierDbContext))]
-    [Migration("20261112122310_ChangeDetection")]
-    partial class ChangeDetection
+    [Migration("20261112141108_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

@@ -1,5 +1,6 @@
 using LibrusNotifier.Calendar;
 using LibrusNotifier.Data;
+using LibrusNotifier.Librus;
 using LibrusNotifier.Logging;
 using LibrusNotifier.Mail;
 using LibrusNotifier.Reporting;
@@ -32,6 +33,10 @@ public sealed class NotificationDispatcher(IMailSender sender, IReadOnlyList<str
             ? []
             : await db.Elements.AsNoTracking().Where(e => relatedIds.Contains(e.Id)).ToDictionaryAsync(e => e.Id, cancellationToken);
 
+        // Oceny i znaczniki pobrań list do raportu pod powiadomieniem o ocenie; wczytywane dopiero przy pierwszej takiej ocenie.
+        List<ElementEntity>? grades = null;
+        List<BaselineEntity>? baselines = null;
+
         var attempts = 0;
         var sent = 0;
         foreach (var notification in pending)
@@ -47,9 +52,17 @@ public sealed class NotificationDispatcher(IMailSender sender, IReadOnlyList<str
             if (attempts >= MaxMailsPerCycle) break;
             attempts++;
 
+            IReadOnlyList<ElementEntity>? subjectGrades = null;
+            if (notification.Element.Type == ElementTypes.Grade && notification.Kind == NotificationKind.New)
+            {
+                grades ??= await db.Elements.AsNoTracking().Where(e => e.Type == ElementTypes.Grade).ToListAsync(cancellationToken);
+                baselines ??= await db.Baselines.AsNoTracking().ToListAsync(cancellationToken);
+                subjectGrades = GradeHistory.ForSubject(notification.Element, grades, baselines, notification.Group);
+            }
+
             var mail = MailTemplates.ForElement(notification.Element, recipients, clock, calendar, notification.Kind,
                 notification.RelatedElementId is { } relatedId ? related.GetValueOrDefault(relatedId) : null,
-                notification.Kind == NotificationKind.New ? null : notification.CreatedUtc);
+                notification.Kind == NotificationKind.New ? null : notification.CreatedUtc, subjectGrades);
             var group = GroupName(notification.Group);
             try
             {

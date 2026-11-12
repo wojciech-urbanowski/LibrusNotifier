@@ -126,7 +126,7 @@ public sealed class NotifierCycle
             queue.UnionWith(carryOver);
             var missingBaselines = await store.MissingBaselinesAsync(account.Account, ct);
             if (missingBaselines.Count > 0)
-                _log.Info($"Konto {name}: pierwsze pobranie list ({string.Join(", ", missingBaselines.Order().Select(m => m.DisplayName()))}) – zapis bez powiadomień.");
+                _log.Info($"Konto {name}: pierwsze pobranie list ({string.Join(", ", missingBaselines.Order().Select(m => m.DisplayName()))}) - zapis bez powiadomień.");
             queue.UnionWith(missingBaselines);
             carryOver.UnionWith(queue);
             if (queue.Count == 0) _log.Info($"Konto {name}: brak nowości wg panelu.");
@@ -190,7 +190,7 @@ public sealed class NotifierCycle
         if (result.Baseline)
         {
             _stats.RecordBaseline(result.ListCount);
-            _log.Info($"Konto {accountName}, {module.DisplayName()}: {result.ListCount} na liście – zapis początkowy bez powiadomień.");
+            _log.Info($"Konto {accountName}, {module.DisplayName()}: {result.ListCount} na liście - zapis początkowy bez powiadomień.");
             return;
         }
         foreach (var group in result.Created.GroupBy(c => c.Element.Type))

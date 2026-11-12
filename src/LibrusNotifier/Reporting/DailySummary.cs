@@ -12,13 +12,14 @@ public static class DailySummary
 {
     private static readonly string[] DayNames = ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"];
 
+    /// <param name="vacuum">Wynik vacuum bazy, gdy wykonano go na zakończenie dnia; opisany na końcu maila.</param>
     public static OutgoingMail Build(DailyStatsSnapshot stats, string? dayDescription, string endReason, DateTime endLocal, int? pendingNotifications,
-        IReadOnlyList<string> recipients)
+        IReadOnlyList<string> recipients, VacuumReport? vacuum = null)
     {
         var body = new StringBuilder();
         body.AppendLine($"Podsumowanie dnia {stats.Day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)} ({DayNames[(int)stats.Day.DayOfWeek]})");
         if (dayDescription is not null) body.AppendLine($"Typ dnia: {dayDescription}");
-        body.AppendLine($"Działanie: {stats.StartedLocal:HH:mm:ss} – {endLocal:HH:mm:ss} ({endReason})");
+        body.AppendLine($"Działanie: {stats.StartedLocal:HH:mm:ss} - {endLocal:HH:mm:ss} ({endReason})");
         body.AppendLine();
 
         body.AppendLine($"Pingi: {stats.Pings} (w tym z przeglądem wszystkich list: {stats.FullReviews})");
@@ -49,10 +50,30 @@ public static class DailySummary
         var warnings = stats.Problems.Where(p => p.Level == LogLevel.Warning).ToList();
         AppendProblems(body, "Błędy", errors);
         AppendProblems(body, "Ostrzeżenia", warnings);
+        if (vacuum is not null) AppendVacuum(body, vacuum);
 
         var subject = $"{AdminReporter.SubjectPrefix}Podsumowanie dnia {stats.Day:yyyy-MM-dd}" +
-            (errors.Count > 0 ? $" – błędy: {errors.Sum(e => e.Count)}" : "");
+            (errors.Count > 0 ? $" - błędy: {errors.Sum(e => e.Count)}" : "");
         return new OutgoingMail(recipients, subject, body.ToString());
+    }
+
+    private static void AppendVacuum(StringBuilder body, VacuumReport vacuum)
+    {
+        var separator = Environment.NewLine + Environment.NewLine;
+        if (!body.ToString().EndsWith(separator, StringComparison.Ordinal)) body.AppendLine();
+
+        var title = $"Vacuum bazy (dzień roku {vacuum.Day.DayOfYear})";
+        if (vacuum.Succeeded)
+        {
+            var change = vacuum.Freed >= 0 ? $"zwolniono {ByteSize.Format(vacuum.Freed)}" : $"powiększono o {ByteSize.Format(-vacuum.Freed)}";
+            body.AppendLine($"{title}: wykonano w {vacuum.DurationText}; rozmiar bazy {ByteSize.Format(vacuum.SizeBefore)} → " +
+                $"{ByteSize.Format(vacuum.SizeAfter)} ({change})");
+        }
+        else
+        {
+            var error = (vacuum.Error ?? "nieznany błąd").Split('\n')[0].TrimEnd();
+            body.AppendLine($"{title}: nie powiódł się - {error}");
+        }
     }
 
     private static void AppendProblems(StringBuilder body, string title, IReadOnlyList<ProblemSummary> problems)

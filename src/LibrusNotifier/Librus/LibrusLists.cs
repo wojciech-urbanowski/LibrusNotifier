@@ -146,7 +146,7 @@ public static class LibrusLists
                     .. changes.SelectMany(c => new[] { c.Key, c.Value?.SubjectSwap ?? "", c.Value?.TeacherSwap ?? "", c.Value?.ClassroomSwap ?? "" })
                 ],
                 Fields(("Zmiana", string.Join(", ", changes.Select(c => c.Key))), ("Data", period.Date), ("Nr lekcji", number),
-                    ("Godziny", $"{period.DateFrom}–{period.DateTo}"), ("Przedmiot", period.Subject), ("Nauczyciel i sala", period.TeacherAndClassroom),
+                    ("Godziny", $"{period.DateFrom} - {period.DateTo}"), ("Przedmiot", period.Subject), ("Nauczyciel i sala", period.TeacherAndClassroom),
                     ("Przedmiot (zmiana)", change?.SubjectSwap), ("Nauczyciel (zmiana)", change?.TeacherSwap),
                     ("Sala (zmiana)", change?.ClassroomSwap), ("Data dodania", change?.DateAdded))));
         }

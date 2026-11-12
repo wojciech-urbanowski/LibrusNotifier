@@ -27,7 +27,7 @@ public sealed record DayInfo(DateOnly Date, DayType Type, bool BeforeSchool, str
         DayType.School => "dzień szkolny",
         DayType.Free => "dzień wolny",
         _ => "wakacje/ferie"
-    }) + (BeforeSchool ? " (przed szkołą)" : "") + (Description is null ? "" : $" – {Description}");
+    }) + (BeforeSchool ? " (przed szkołą)" : "") + (Description is null ? "" : $" - {Description}");
 }
 
 /// <summary>

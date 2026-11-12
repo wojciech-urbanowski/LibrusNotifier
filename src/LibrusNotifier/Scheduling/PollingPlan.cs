@@ -17,7 +17,7 @@ public sealed record PollingWindow(string Name, TimeSpan Start, TimeSpan End, Ti
     public bool Contains(TimeSpan timeOfDay) => timeOfDay >= Start && timeOfDay < End;
 
     public override string ToString() =>
-        $"{Name} {Format(Start)}–{Format(End)}, co {Interval.TotalMinutes:0} min {(Mode == JitterMode.Symmetric ? "±" : "+0…")}{Jitter.TotalMinutes:0} min";
+        $"{Name} {Format(Start)} - {Format(End)}, co {Interval.TotalMinutes:0} min {(Mode == JitterMode.Symmetric ? "±" : "+0…")}{Jitter.TotalMinutes:0} min";
 
     private static string Format(TimeSpan time) => $"{(int)time.TotalHours:00}:{time.Minutes:00}";
 }

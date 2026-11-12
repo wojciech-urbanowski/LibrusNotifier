@@ -81,7 +81,7 @@ public static class App
         }
         if (instanceLock is null)
         {
-            log.Info($"Inna instancja LibrusNotifier już działa (blokada {paths.LockFile} jest zajęta) – kończę.");
+            log.Info($"Inna instancja LibrusNotifier już działa (blokada {paths.LockFile} jest zajęta) - kończę.");
             return ExitAlreadyRunning;
         }
 
@@ -143,6 +143,8 @@ public static class App
         try
         {
             Directory.CreateDirectory(paths.DataDirectory);
+            // Kopia przed migracją, żeby zachować stan bazy sprzed ewentualnej zmiany schematu.
+            new DatabaseBackup(clock, log).Run(paths.DatabaseFile, paths.BackupDirectory);
             await using (var db = NotifierDbContext.Create(paths.DatabaseFile))
                 await db.Database.MigrateAsync(dayGuard.Token);
 
@@ -174,12 +176,12 @@ public static class App
         }
         catch (OperationCanceledException) when (dayGuard.DayChanged)
         {
-            log.Info("Zmiana dnia – kończę działanie.");
+            log.Info("Zmiana dnia - kończę działanie.");
             endReason = "zmiana dnia";
         }
         catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
         {
-            log.Info("Przerwano działanie (Ctrl+C / SIGTERM) – kończę bez podsumowania dnia.");
+            log.Info("Przerwano działanie (Ctrl+C / SIGTERM) - kończę bez podsumowania dnia.");
             return ExitInterrupted;
         }
         catch (Exception e)
@@ -195,13 +197,15 @@ public static class App
             Console.CancelKeyPress -= onCancel;
         }
 
-        await SendDailySummaryAsync(paths, clock, log, stats, admin, sender, dayInfo, endReason, config.AdminRecipients);
+        // Wszystkie połączenia z bazą są już zamknięte; wynik vacuum trafia na koniec podsumowania dnia.
+        var vacuum = DatabaseVacuum.RunIfDue(day, paths.DatabaseFile, log);
+        await SendDailySummaryAsync(paths, clock, log, stats, admin, sender, dayInfo, endReason, config.AdminRecipients, vacuum);
         log.Info($"Koniec działania ({endReason}).");
         return exitCode;
     }
 
     private static async Task SendDailySummaryAsync(AppPaths paths, Clock clock, AppLog log, DailyStats stats, AdminReporter admin,
-        IMailSender sender, DayInfo? dayInfo, string endReason, IReadOnlyList<string> recipients)
+        IMailSender sender, DayInfo? dayInfo, string endReason, IReadOnlyList<string> recipients, VacuumReport? vacuum)
     {
         int? pending = null;
         try
@@ -216,7 +220,7 @@ public static class App
         {
             log.Warn($"Nie można policzyć oczekujących powiadomień: {e.Message}");
         }
-        var mail = DailySummary.Build(stats.Snapshot(), dayInfo?.DisplayName, endReason, clock.Now, pending, recipients);
+        var mail = DailySummary.Build(stats.Snapshot(), dayInfo?.DisplayName, endReason, clock.Now, pending, recipients, vacuum);
         await admin.SendAsync(mail);
         await sender.CloseAsync();
     }

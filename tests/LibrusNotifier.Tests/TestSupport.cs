@@ -109,6 +109,10 @@ internal sealed class FakeGateway(AccountKind account) : IAccountGateway
     public Dictionary<ModuleKind, List<ObservedItem>> Lists { get; } = KindNames.AllModules.ToDictionary(m => m, _ => new List<ObservedItem>());
     public PanelCounters Counters { get; set; } = PanelCounters.Empty;
     public Exception? LoginError { get; set; }
+
+    /// <summary>Wywoływane na początku logowania, czyli na początku sprawdzania konta w pingu (np. do zapisu kolejności zdarzeń).</summary>
+    public Action? OnLogin { get; set; }
+
     public Dictionary<ModuleKind, Exception> FetchErrors { get; } = [];
     public Queue<PanelCounters?> EnsureResults { get; } = new();
     public List<ModuleKind> Fetched { get; } = [];
@@ -119,6 +123,7 @@ internal sealed class FakeGateway(AccountKind account) : IAccountGateway
     public Task<PanelCounters> LoginAsync(CancellationToken cancellationToken)
     {
         Logins++;
+        OnLogin?.Invoke();
         if (LoginError is not null) throw LoginError;
         return Task.FromResult(Counters);
     }
@@ -178,13 +183,16 @@ internal sealed class TestDatabase : IDisposable
 
 internal static class Items
 {
-    public static ObservedItem Grade(string subject, string mark, string date = "2026-11-10") =>
+    public static ObservedItem Grade(string subject, string mark, string date = "2026-11-10", int semester = 1) =>
         LibrusLists.FromGrades(new LibrusApixNet.GradesResult(
-            [new Dictionary<string, List<LibrusApixNet.Grade>>
-            {
-                [subject] = [new LibrusApixNet.Grade(subject, mark, true, date, "/grade/1", $"Ocena: {mark}\nPrzedmiot: {subject}\nKomentarz: dobrze", 1, "Kartkówka", "Anna Nowak", 2)]
-            }, []],
+            [semester == 1 ? Semester(subject, mark, date, 1) : [], semester == 2 ? Semester(subject, mark, date, 2) : []],
             [], [[], []]))[0];
+
+    private static Dictionary<string, List<LibrusApixNet.Grade>> Semester(string subject, string mark, string date, int semester) =>
+        new()
+        {
+            [subject] = [new LibrusApixNet.Grade(subject, mark, true, date, "/grade/1", $"Ocena: {mark}\nPrzedmiot: {subject}\nKomentarz: dobrze", semester, "Kartkówka", "Anna Nowak", 2)]
+        };
 
     public static ObservedItem Message(string author, string title, string href, string date = "2026-11-10 12:00") =>
         LibrusLists.FromMessages([new LibrusApixNet.Message(author, title, date, href, true, false)])[0];
