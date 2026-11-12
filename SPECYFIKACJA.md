@@ -22,7 +22,7 @@ LibrusNotifier to aplikacja konsolowa, która okresowo pobiera informacje o uczn
 
 - Katalog aplikacji (konfiguracja i dane) to domyślnie katalog pliku wykonywalnego, niezależnie od katalogu roboczego procesu. Argument `--katalog <ścieżka>` wskazuje inny katalog.
 - Baza: `data/librus.db`.
-- `--run-once` wykonuje jeden cykl wszystkich sprawdzeń i kończy proces, bez planowania kolejnych. Można łączyć z `--katalog`.
+- `--run-once` wykonuje jeden cykl wszystkich sprawdzeń oraz należne zestawienia dzienne (sekcja 8) i kończy proces, bez planowania kolejnych. Można łączyć z `--katalog`.
 - Zwykłe uruchamianie: automatycznie w środku nocy (cron na Raspberry Pi, Harmonogram zadań na Windows).
 - **Jedna instancja:** przy starcie aplikacja zakłada blokadę systemową na pliku w katalogu aplikacji (zwalnianą także po awarii procesu). Jeśli blokada jest zajęta, zapisuje komunikat w logu i od razu kończy działanie.
 
@@ -167,8 +167,8 @@ Dwa razy dziennie aplikacja wysyła mail z chronologiczną listą nadchodzących
 
 | Zestawienie | Kiedy | Pierwsza sekcja | Warunek wysyłki |
 | --- | --- | --- | --- |
-| Poranne | 6:30, tylko w dni nauki (pn–pt poza świętami, feriami i wakacjami) | „Dzisiaj” – lista do odhaczania | zawsze, także gdy na dziś nic nie ma |
-| Popołudniowe | 15:00, codziennie | „Jutro” – lista do odhaczania | w ciągu roku zawsze; w wakacje i ferie tylko gdy jest jakiekolwiek wydarzenie po dzisiejszym dniu |
+| Poranne | 6:30, tylko w dni nauki (pn–pt poza świętami, feriami i wakacjami) | „Dzisiaj” – wydarzenia na dziś | zawsze, także gdy na dziś nic nie ma |
+| Popołudniowe | 15:00, codziennie | „Jutro” – wydarzenia na jutro | w ciągu roku zawsze; w wakacje i ferie tylko gdy jest jakiekolwiek wydarzenie po dzisiejszym dniu |
 
 - **Jutro wolne (popołudniowe).** Gdy jutro nie ma nauki (weekend, święto, ferie, wakacje), zamiast „Jutro” pierwszą, wyróżnioną sekcją jest pierwszy dzień nauki po wolnym: „Poniedziałek” po zwykłym weekendzie, w pozostałych przypadkach z datą, np. „Wtorek, 2.11.2027”. Nad sekcjami jest baner z powodem wolnego. Dopiero po niej idzie lista kolejnych wydarzeń.
 - **Kolejne wydarzenia.** Wszystkie wydarzenia po dzisiejszym dniu (poza dniem sekcji głównej), chronologicznie i pogrupowane po dniach; zakres wyznacza to, co jest w bazie (terminarz: bieżący i następny miesiąc). Sekcje bez wydarzeń zostają w mailu z krótkim komunikatem.
@@ -197,7 +197,8 @@ Dwa razy dziennie aplikacja wysyła mail z chronologiczną listą nadchodzących
   - **Oba zestawienia zaległe.** Poranne „na dziś” jest wysyłane tylko do 15:00. Gdy aplikacja wystartuje po 15:00, a żadne zestawienie nie zostało dziś wysłane, wychodzi wyłącznie popołudniowe, a pominięcie porannego jest odnotowane w logu.
   - **Nowa baza.** Reguły działają tak samo w nowo założonej bazie (pierwszy ping zapisuje wtedy początkowy stan list bez powiadomień, a zestawienie powstaje z tych danych). Zestawienie czeka jednak, dopóki z konta danej grupy (rodzic dla rodziców, uczeń dla ucznia) nie pobrano terminarza choć raz, np. gdy pierwszy ping się nie udał; bez danych komunikat „brak zdarzeń” byłby nieprawdziwy. Wpis w logu pojawia się raz.
 - **Błędy wysyłki.** Po nieudanej wysyłce aplikacja ponawia próbę co 5 minut (poranne najdłużej do 15:00, popołudniowe do końca dnia), a administratorzy dostają mail o błędzie.
-- **Poza zakresem.** `--run-once` nie wysyła zestawień. Dni wolne ustalone przez szkołę (np. dni dyrektorskie) są dla kalendarza dniami nauki, więc poranne zestawienie wyjdzie też w takim dniu (patrz sekcja 9).
+- **`--run-once`.** Po cyklu wysyła należne zestawienia wg tych samych reguł (termin minął, dziś niewysłane wg `DigestLogs`, poranne tylko do 15:00), więc uruchamiany z crona po 15:00 wysyła popołudniowe; nieudanej wysyłki nie ponawia (zrobi to kolejne uruchomienie).
+- **Poza zakresem.** Dni wolne ustalone przez szkołę (np. dni dyrektorskie) są dla kalendarza dniami nauki, więc poranne zestawienie wyjdzie też w takim dniu (patrz sekcja 9).
 
 ## 9. Harmonogram odpytywania
 

@@ -4,10 +4,13 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>LibrusNotifier</RootNamespace>
     <AssemblyName>LibrusNotifier</AssemblyName>
-    <Version>0.2.0</Version>
+    <Version>0.3.1</Version>
     <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
     <!-- Bez zależności od ICU (np. na Raspberry Pi OS Lite). Strefa czasowa: tzdata (Linux) lub rejestr (Windows). -->
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- W trybie invariant domyślnie PredefinedCulturesOnly=true i new CultureInfo("en") rzuca wyjątek (PublicHoliday tworzy
+         tę kulturę w inicjalizatorze typu, więc bez tego kalendarz święt nie działa bez ICU). Z false kultura działa na danych niezmiennych. -->
+    <PredefinedCulturesOnly>false</PredefinedCulturesOnly>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- TYMCZASOWO: true = projekt z lokalnego repo LibrusApixNet (poprawki biblioteki od razu po kompilacji),
          false = pakiet NuGet. Można też nadpisać z wiersza poleceń: -p:UseLocalLibrusApixNet=false -->
@@ -19,17 +22,17 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalLibrusApixNet)' != 'true'">
-    <PackageReference Include="LibrusApixNet" Version="1.6.0-beta4" />
+    <PackageReference Include="LibrusApixNet" Version="1.6.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MailKit" Version="4.18.2" />
+    <PackageReference Include="MailKit" Version="5.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.15" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="PublicHoliday" Version="3.17.0" />
+    <PackageReference Include="PublicHoliday" Version="4.0.0" />
   </ItemGroup>
 
   <ItemGroup>

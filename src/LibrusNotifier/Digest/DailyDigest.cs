@@ -10,7 +10,7 @@ public sealed record DigestDay(DateOnly Date, IReadOnlyList<DigestEvent> Events)
 
 /// <param name="Title">Nagłówek sekcji (np. „Dzisiaj”, „Jutro”, „Poniedziałek”, „Wtorek, 2.11.2027”).</param>
 /// <param name="Subtitle">Przygaszony podtytuł (data i odległość od dziś).</param>
-/// <param name="Primary">Sekcja główna (lista do odhaczania na jeden dzień); pozostałe to lista kolejnych wydarzeń.</param>
+/// <param name="Primary">Sekcja główna (wydarzenia jednego dnia); pozostałe to lista kolejnych wydarzeń.</param>
 /// <param name="EmptyText">Tekst, gdy sekcja nie ma zdarzeń.</param>
 public sealed record DigestSection(string Title, string? Subtitle, bool Primary, IReadOnlyList<DigestDay> Days, string EmptyText)
 {

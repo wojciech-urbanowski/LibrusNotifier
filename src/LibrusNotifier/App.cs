@@ -160,17 +160,19 @@ public static class App
             var cycle = new NotifierCycle([parent, student], () => NotifierDbContext.Create(paths.DatabaseFile), dispatcher, sender, admin,
                 clock, log, stats, studentNotifications: config.StudentRecipients.Count > 0);
 
+            var digest = new DigestService(sender, config.ParentRecipients, config.StudentRecipients, () => NotifierDbContext.Create(paths.DatabaseFile),
+                calendar, clock, log, admin, stats);
             if (options.RunOnce)
             {
                 dayGuard.Check();
                 await cycle.RunAsync(forceFullReview: true, dayGuard.Token);
+                // Ta sama zasada co po pingu w pętli: należne zestawienia (termin minął, dziś jeszcze niewysłane wg DigestLogs) wychodzą po cyklu.
+                await digest.RunDueAsync(dayGuard.Token);
                 endReason = "--run-once";
             }
             else
             {
                 var scheduler = new PollingScheduler(day, PollingPlan.ForDay(dayInfo), Random.Shared);
-                var digest = new DigestService(sender, config.ParentRecipients, config.StudentRecipients, () => NotifierDbContext.Create(paths.DatabaseFile),
-                    calendar, clock, log, admin, stats);
                 await new PingLoop(scheduler, cycle, clock, dayGuard, log, admin, digest: digest).RunAsync();
             }
         }
