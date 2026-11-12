@@ -29,6 +29,18 @@ public readonly record struct GradeTerm(int? Semester, int? SchoolYear)
     /// <summary>Rok, w którym rok szkolny się zaczął (wrzesień–grudzień: rok daty, styczeń–sierpień: rok wcześniejszy).</summary>
     public static int SchoolYearOf(DateOnly date) => date.Month >= 9 ? date.Year : date.Year - 1;
 
+    /// <summary>
+    /// Bieżący okres wg daty: semestr 1 trwa od września do stycznia, semestr 2 od lutego do czerwca (jak w <see cref="SchoolYearOf"/>
+    /// rok szkolny zaczyna się 1 września). Lipiec i sierpień to wakacje: nie ma wtedy bieżącego semestru (<c>null</c>).
+    /// Termin zakończenia semestru ustala szkoła (najpóźniej w styczniu), więc granica jest przybliżona.
+    /// </summary>
+    public static GradeTerm? CurrentAt(DateOnly today) => today.Month switch
+    {
+        >= 9 or 1 => new GradeTerm(1, SchoolYearOf(today)),
+        >= 2 and <= 6 => new GradeTerm(2, SchoolYearOf(today)),
+        _ => null
+    };
+
     /// <summary>Oceny są z tego samego okresu, o ile żaden ze znanych składników się nie różni.</summary>
     public bool Matches(GradeTerm other) => Agree(Semester, other.Semester) && Agree(SchoolYear, other.SchoolYear);
 

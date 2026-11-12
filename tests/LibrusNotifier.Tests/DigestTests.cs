@@ -61,6 +61,14 @@ internal static class DigestElements
         return Make(ElementTypes.TimetableChange, fields, parent, student, lastSeen);
     }
 
+    /// <summary>Ocena do zapisu w bazie: <c>Id</c> nadaje baza (<see cref="GradeElements"/> numeruje własnym licznikiem, bo oceny z testów bez bazy go potrzebują).</summary>
+    public static ElementEntity Grade(string subject, string mark, string date, string semester = "1", bool student = true)
+    {
+        var grade = GradeElements.Create(subject, mark, date, semester: semester, student: student);
+        grade.Id = 0;
+        return grade;
+    }
+
     public static ElementEntity Homework(string due, string subject, string topic, bool parent = true, bool student = true) =>
         Make(ElementTypes.Homework,
             [new Field("Przedmiot", subject), new Field("Temat", topic), new Field("Nauczyciel", "Anna Nowak"),
@@ -606,6 +614,63 @@ public sealed class DigestServiceTests : IDisposable
         Assert.Contains("Fizyka", Digests(Parent).Single().Body);
         Assert.DoesNotContain("Fizyka", Digests(Student).Single().Body);
         Assert.Contains("Chemia", Digests(Student).Single().Body);
+    }
+
+    [Fact]
+    public async Task EveryDigestEndsWithTheGradeTableOfTheCurrentSemester()
+    {
+        Seed(UpcomingTest(),
+            DigestElements.Grade("Matematyka", "5", "2026-10-10"), DigestElements.Grade("Matematyka", "4+", "2026-11-03"),
+            DigestElements.Grade("Język polski", "3", "2026-10-20"),
+            DigestElements.Grade("Fizyka", "1", "2025-10-10"), // poprzedni rok szkolny
+            DigestElements.Grade("Chemia", "2", "2027-02-10", semester: "2")); // drugi semestr
+        var (service, clock, _, _) = Create(new DateTime(2026, 11, 12, 6, 30, 0));
+
+        await service.RunDueAsync(CancellationToken.None);
+        clock.SetLocal(new DateTime(2026, 11, 12, 15, 0, 0));
+        await service.RunDueAsync(CancellationToken.None);
+
+        var mails = Digests(Parent);
+        Assert.Equal(2, mails.Count); // poranne i popołudniowe
+        foreach (var mail in mails)
+        {
+            Assert.Contains("Oceny z bieżącego semestru", mail.HtmlBody);
+            Assert.Contains("Język polski: 3\nMatematyka: 5, 4+", mail.Body.Replace("\r\n", "\n"));
+            Assert.DoesNotContain("Fizyka: 1", mail.Body);
+            Assert.DoesNotContain("Chemia: 2", mail.Body);
+        }
+    }
+
+    [Fact]
+    public async Task StudentGradeTableHasOnlyGradesOfTheStudentAccount()
+    {
+        Seed(UpcomingTest(),
+            DigestElements.Grade("Matematyka", "5", "2026-10-10"),
+            DigestElements.Grade("Fizyka", "2", "2026-10-11", student: false));
+        var (service, _, _, _) = Create(new DateTime(2026, 11, 12, 6, 30, 0));
+
+        await service.RunDueAsync(CancellationToken.None);
+
+        Assert.Contains("Fizyka: 2", Digests(Parent).Single().Body);
+        var student = Digests(Student).Single().Body;
+        Assert.Contains("Matematyka: 5", student);
+        Assert.DoesNotContain("Fizyka: 2", student);
+    }
+
+    [Fact]
+    public async Task GradeTableSaysThereAreNoGradesAndSummerHasNoTable()
+    {
+        Seed(UpcomingTest("2027-09-02"));
+        var (service, clock, _, _) = Create(new DateTime(2026, 11, 12, 6, 30, 0));
+        await service.RunDueAsync(CancellationToken.None);
+        Assert.Contains("Brak ocen w bieżącym semestrze.", Digests(Parent).Single().Body);
+
+        clock.SetLocal(new DateTime(2027, 7, 15, 15, 0, 0)); // lipiec: nie ma bieżącego semestru (kalendarz testu nie zna wakacji, więc zestawienie wychodzi)
+        await service.RunDueAsync(CancellationToken.None);
+        var summer = Digests(Parent).Last();
+        Assert.StartsWith("[Librus] Zdarzenia na", summer.Subject);
+        Assert.DoesNotContain("Oceny z bieżącego semestru", summer.HtmlBody);
+        Assert.DoesNotContain("Brak ocen", summer.Body);
     }
 
     [Fact]

@@ -24,19 +24,34 @@ public static class GradeHistory
         var currentFields = TrackedElements.Fields(element);
         var subject = SubjectOf(currentFields);
         if (subject.Length == 0) return [];
-        var term = GradeTerm.Of(currentFields);
-        var result = grades
-            .Where(g => g.Type == ElementTypes.Grade && g.Key != element.Key)
-            .Where(g => group == RecipientGroup.Parents || g.VisibleToStudent)
-            .Select(g => (Element: g, Fields: TrackedElements.Fields(g)))
+        var result = InTerm(GradeTerm.Of(currentFields), grades, baselines, group)
+            .Where(x => x.Element.Key != element.Key)
             .Where(x => string.Equals(SubjectOf(x.Fields), subject, StringComparison.OrdinalIgnoreCase))
-            .Where(x => term.Matches(GradeTerm.Of(x.Fields)))
             .Select(x => x.Element)
-            .Where(g => !TrackedElements.IsGone(g, baselines, ModuleKind.Grades))
             .ToList();
         result.Add(element);
         return result;
     }
+
+    /// <summary>
+    /// Wszystkie oceny (wszystkich przedmiotów) z okresu <paramref name="term"/> dla grupy odbiorców, które są teraz w Librusie – do tabeli
+    /// ocen w zestawieniach dziennych (<see cref="Mail.GradeTable"/>). Zasady jak w <see cref="ForSubject"/>: uczeń widzi tylko oceny
+    /// ze swojego konta, oceny z innego semestru lub roku szkolnego oraz te, które zniknęły z listy w Librusie, są pomijane,
+    /// a okres, którego nie da się odczytać, nie wyklucza oceny. Oceny opisowe nie są tu uwzględniane.
+    /// </summary>
+    /// <param name="grades">Wszystkie oceny z bazy (typ <see cref="ElementTypes.Grade"/>); inne typy są ignorowane.</param>
+    public static IReadOnlyList<ElementEntity> ForTerm(GradeTerm term, IEnumerable<ElementEntity> grades,
+        IReadOnlyList<BaselineEntity> baselines, RecipientGroup group) =>
+        InTerm(term, grades, baselines, group).Select(x => x.Element).ToList();
+
+    private static IEnumerable<(ElementEntity Element, IReadOnlyDictionary<string, string> Fields)> InTerm(GradeTerm term,
+        IEnumerable<ElementEntity> grades, IReadOnlyList<BaselineEntity> baselines, RecipientGroup group) =>
+        grades
+            .Where(g => g.Type == ElementTypes.Grade)
+            .Where(g => group == RecipientGroup.Parents || g.VisibleToStudent)
+            .Select(g => (Element: g, Fields: TrackedElements.Fields(g)))
+            .Where(x => term.Matches(GradeTerm.Of(x.Fields)))
+            .Where(x => !TrackedElements.IsGone(x.Element, baselines, ModuleKind.Grades));
 
     private static string SubjectOf(IReadOnlyDictionary<string, string> fields) =>
         ElementKeys.Normalize(fields.GetValueOrDefault("Przedmiot"));
