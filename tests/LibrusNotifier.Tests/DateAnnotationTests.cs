@@ -87,6 +87,28 @@ public sealed class DateAnnotationTests
     }
 
     [Fact]
+    public void DateInsideAnAddressIsLeftAloneInPlainTextAndHtml()
+    {
+        const string text = "do 2026-11-13 zapisy na https://szkola.pl/2026-11-13/zapisy";
+        var annotator = Annotator(Thursday);
+
+        Assert.Equal("do 2026-11-13 (piątek, jutro) zapisy na https://szkola.pl/2026-11-13/zapisy", annotator.Plain(text));
+        Assert.Equal("do <strong>2026-11-13 (piątek, jutro)</strong> zapisy na <a href=\"https://szkola.pl/2026-11-13/zapisy\">https://szkola.pl/2026-11-13/zapisy</a>",
+            annotator.Html(text));
+    }
+
+    [Fact]
+    public void AddressIsNeverCutWhenFittingTextToLength()
+    {
+        const string url = "https://szkola.pl/adres";
+
+        var result = Annotator(Thursday).PlainFitting($"Bardzo długi opis wydarzenia szkolnego {url} 2026-11-13", 75);
+
+        Assert.Equal("Bardzo długi opis wydar… https://szkola.pl/adres 2026-11-13 (piątek, jutro)", result);
+        Assert.Equal(75, result.Length);
+    }
+
+    [Fact]
     public void HtmlEncodesTextAndKeepsLineBreaks() =>
         Assert.Equal("a &lt;b&gt; &amp;<br>\n<strong>2026-11-13 (piątek, jutro)</strong><br>\nc",
             Annotator(Thursday).Html("a <b> &\r\n2026-11-13\nc"));
