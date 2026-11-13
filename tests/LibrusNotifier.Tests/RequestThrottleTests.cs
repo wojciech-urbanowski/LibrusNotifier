@@ -43,7 +43,7 @@ public sealed class RequestThrottleTests
         public HttpClient Student { get; }
 
         private LibrusHttpHandler Handler(AccountKind account, DailyStats stats) =>
-            new(Inner, new CookieContainer(), account, Log, stats, Guard, new SessionActivity(Clock, TimeSpan.FromMinutes(9)), Throttle);
+            new(Inner, new CookieContainer(), account, Log, stats, Guard, new SessionActivity(Clock, TimeSpan.FromMinutes(9)), Throttle, TestBrowser.Profile);
 
         public async Task GetAsync(HttpClient client, string path = "/x") => (await client.GetAsync("https://school.test" + path, Guard.Token)).Dispose();
 

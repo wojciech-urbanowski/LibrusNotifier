@@ -97,6 +97,13 @@ W obrębie jednego cyklu aplikacja używa ponownie tokenu, zamiast logować się
 - Sesja nie jest odświeżana w tle.
 - Każdy ping zaczyna się od nowego zalogowania obu kont niezależnie od limitu bezczynności (patrz sekcja 6); sesja jest ponownie używana tylko w obrębie jednego cyklu.
 
+### Tożsamość przeglądarki
+
+- Przy każdym starcie program losuje jeden profil przeglądarki (`BrowserCatalog.Pick`): rodzinę (Chrome, Edge, Firefox lub Safari, z wagami odpowiadającymi orientacyjnej popularności), system (Windows, macOS lub Linux) i wersję. Profil obowiązuje do końca działania procesu, oba konta Librusa i zapytania o ferie. Wylosowany profil jest zapisywany w logu.
+- Profil to spójny zestaw nagłówków: `User-Agent`, `Accept-Language` i, dla Chrome i Edge, `sec-ch-ua`, `sec-ch-ua-mobile`, `sec-ch-ua-platform`. Te nagłówki nadpisują `User-Agent` dodawany przez bibliotekę klienta Librusa.
+- Pula zawiera tylko świeże wersje desktopowe: ostatnie wersje Chrome i Edge, trzy ostatnie wersje Firefoxa plus bieżące ESR i wersje Safari dostępne na macOS. Wagi faworyzują najnowszą wersję.
+- **Utrzymanie listy wersji.** Lista w `BrowserCatalog` ma datę ostatniej weryfikacji (`VerifiedOn`). Przy każdej zmianie w programie należy ją sprawdzić; jeśli minęło więcej niż 60 dni, trzeba odświeżyć wersje przed zatwierdzeniem zmian (`scripts/odswiez-wersje-przegladarek.sh` wypisuje aktualne wersje stabilne z oficjalnych źródeł) i ustawić `VerifiedOn` na dzisiaj. Gdy od weryfikacji minie ponad 120 dni, start programu zapisuje ostrzeżenie w logu, które trafia też do raportu dla administratora.
+
 ## 6. Dane i wykrywanie nowości
 
 - Obserwowane dane (z obu kont): oceny (także opisowe), wiadomości odebrane, ogłoszenia, terminarz, zadania domowe, frekwencja, plan lekcji (zmiany), zrealizowane lekcje.

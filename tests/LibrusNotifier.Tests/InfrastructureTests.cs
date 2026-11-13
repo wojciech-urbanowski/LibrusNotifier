@@ -73,7 +73,7 @@ public sealed class InfrastructureTests : IDisposable
                 : MockHandler.Html("""[{"startDate":"2027-01-18","endDate":"2027-01-31","type":"School","name":[{"language":"PL","text":"Ferie zimowe"}]}]""",
                     mediaType: "application/json");
         });
-        var provider = new SchoolHolidayProvider(cache, clock, log, handler);
+        var provider = new SchoolHolidayProvider(cache, clock, log, TestBrowser.Profile, handler);
 
         var fetched = await provider.LoadAsync("PL-DS", CancellationToken.None);
         Assert.Equal(new SchoolHolidayPeriod(new DateOnly(2027, 1, 18), new DateOnly(2027, 1, 31), "Ferie zimowe"), Assert.Single(fetched));
