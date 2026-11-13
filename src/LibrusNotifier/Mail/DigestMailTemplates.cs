@@ -12,7 +12,8 @@ namespace LibrusNotifier.Mail;
 /// <summary>
 /// Treść maila z dziennym zestawieniem nadchodzących wydarzeń (HTML + tekst zapasowy). Pola z typem zdarzenia mają pastelowe kolory
 /// (<see cref="DigestPalette"/>); sekcja główna (dziś / jutro / pierwszy dzień nauki po wolnym) jest wyróżniona w ramce.
-/// Na końcu (przed stopką) jest tabela ocen z bieżącego semestru (<see cref="GradeTable"/>), kolorowana jak oceny w mailu o nowej ocenie.
+/// W zestawieniu popołudniowym na końcu (przed stopką) jest tabela ocen z bieżącego semestru (<see cref="GradeTable"/>), kolorowana
+/// jak oceny w mailu o nowej ocenie; poranne („Odprawa poranna”) jej nie ma (wywołujący przekazuje wtedy <c>null</c>).
 /// </summary>
 public static class DigestMailTemplates
 {
@@ -28,7 +29,7 @@ public static class DigestMailTemplates
     private const string PrimaryBoxStyle = "margin:0 0 8px;padding:8px 14px;border-left:6px solid #4a7dbf;background:rgba(74,125,191,0.16);max-width:740px;";
     private const string BannerStyle = "margin:0 0 16px;padding:8px 14px;border:1px solid #c9a227;background:rgba(255,200,0,0.18);max-width:740px;";
 
-    /// <param name="grades">Tabela ocen z bieżącego semestru na końcu maila (przed stopką); <c>null</c> (wakacje letnie) – bez tabeli.</param>
+    /// <param name="grades">Tabela ocen z bieżącego semestru na końcu maila (przed stopką); <c>null</c> (zestawienie poranne, wakacje letnie) - bez tabeli.</param>
     public static OutgoingMail Build(DailyDigest digest, IReadOnlyList<string> to, Clock clock, SchoolCalendar calendar, DateTime? dataAsOfLocal = null,
         GradeTable? grades = null)
     {
@@ -37,6 +38,9 @@ public static class DigestMailTemplates
         return new OutgoingMail(to, subject, BuildText(digest, dates, dataAsOfLocal, grades), BuildHtml(subject, digest, dates, dataAsOfLocal, grades));
     }
 
+    /// <summary>
+    /// Temat. Poranne („Odprawa poranna”) mówi tylko o dniu dzisiejszym; popołudniowe dodaje liczbę kolejnych wydarzeń.
+    /// </summary>
     public static string BuildSubject(DailyDigest digest)
     {
         var primary = digest.PrimarySection;
@@ -49,13 +53,25 @@ public static class DigestMailTemplates
         else
         {
             var iso = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            var when = digest.Kind == DigestKind.Morning ? $"dziś, {DigestBuilder.DayName(date)} {iso}"
-                : primary.Title == "Jutro" ? $"jutro, {DigestBuilder.DayName(date)} {iso}"
-                : $"{DigestBuilder.DayNameAccusative(date)} {iso}";
-            text = $"Zdarzenia na {when}: {Summary(primary)}; kolejne: {upcoming}";
+            if (digest.Kind == DigestKind.Morning)
+            {
+                text = $"{MorningTitle}, {DigestBuilder.DayName(date)} {iso}: {Summary(primary)}";
+            }
+            else
+            {
+                var when = primary.Title == "Jutro" ? $"jutro, {DigestBuilder.DayName(date)} {iso}" : $"{DigestBuilder.DayNameAccusative(date)} {iso}";
+                text = $"Zdarzenia na {when}: {Summary(primary)}; kolejne: {upcoming}";
+            }
         }
         return MailTemplates.CleanSubject(MailTemplates.SubjectPrefix + text);
     }
+
+    /// <summary>Nazwa porannego zestawienia (temat i nagłówek maila).</summary>
+    public const string MorningTitle = "Odprawa poranna";
+
+    private const string AfternoonTitle = "Nadchodzące wydarzenia";
+
+    private static string Title(DailyDigest digest) => digest.Kind == DigestKind.Morning ? MorningTitle : AfternoonTitle;
 
     private static string Summary(DigestSection primary)
     {
@@ -72,7 +88,7 @@ public static class DigestMailTemplates
     private static string BuildText(DailyDigest digest, DateAnnotator dates, DateTime? dataAsOf, GradeTable? grades)
     {
         var text = new StringBuilder();
-        text.AppendLine("Nadchodzące wydarzenia").AppendLine();
+        text.AppendLine(Title(digest)).AppendLine();
         if (digest.Banner is not null) text.AppendLine(digest.Banner).AppendLine();
 
         foreach (var section in digest.Sections)
@@ -140,7 +156,7 @@ public static class DigestMailTemplates
             .AppendLine($"<title>{Encode(title)}</title>")
             .AppendLine("</head>")
             .AppendLine($"<body style=\"{PageStyle}\">")
-            .AppendLine("<h1 style=\"margin:0 0 12px;font-size:18px;font-weight:600;\">Nadchodzące wydarzenia</h1>");
+            .AppendLine($"<h1 style=\"margin:0 0 12px;font-size:18px;font-weight:600;\">{Encode(Title(digest))}</h1>");
 
         if (digest.Banner is not null) html.AppendLine($"<div style=\"{BannerStyle}\">{Encode(digest.Banner)}</div>");
 

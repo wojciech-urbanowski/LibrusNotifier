@@ -11,6 +11,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LibrusNotifier.Tests;
 
+/// <summary>Rozpoznaje maile z zestawieniem po temacie: poranne („Odprawa poranna”) i popołudniowe („Zdarzenia na …”).</summary>
+internal static class DigestSubjects
+{
+    public static bool IsDigest(string subject) =>
+        subject.StartsWith("[Librus] Odprawa poranna", StringComparison.Ordinal)
+        || subject.StartsWith("[Librus] Zdarzenia na", StringComparison.Ordinal)
+        || subject.StartsWith("[Librus] Nadchodzące", StringComparison.Ordinal);
+}
+
 internal static class DigestElements
 {
     private static readonly DateTime Seen = new(2026, 11, 12, 5, 0, 0, DateTimeKind.Utc);
@@ -493,7 +502,11 @@ public sealed class DigestMailTemplateTests
             Event("2026-11-12", EventCategory.Substitution, "Zastępstwo", "Język polski", 1),
             Event("2026-11-13", EventCategory.Quiz, "Kartkówka", "Fizyka", 4));
 
-        Assert.Equal("[Librus] Zdarzenia na dziś, czwartek 2026-11-12: 2 (sprawdzian, zastępstwo); kolejne: 1", mail.Subject);
+        // Temat poranny mówi tylko o dzisiejszym dniu, bez liczby kolejnych wydarzeń.
+        Assert.Equal("[Librus] Odprawa poranna, czwartek 2026-11-12: 2 (sprawdzian, zastępstwo)", mail.Subject);
+        Assert.StartsWith("Odprawa poranna", mail.Body);
+        Assert.Contains("<h1 style=\"margin:0 0 12px;font-size:18px;font-weight:600;\">Odprawa poranna</h1>", mail.HtmlBody);
+        Assert.DoesNotContain("Nadchodzące wydarzenia", mail.Body);
         Assert.Contains("  - Sprawdzian · lekcja 2 · Język angielski", mail.Body);
         Assert.DoesNotContain("[ ]", mail.Body);
         Assert.Contains("  - Kartkówka · lekcja 4 · Fizyka", mail.Body);
@@ -523,7 +536,7 @@ public sealed class DigestMailTemplateTests
             Event("2026-11-12", EventCategory.Quiz, "Kartkówka", "Fizyka"),
             Event("2026-11-12", EventCategory.Test, "Praca klasowa", "Historia"),
             Event("2026-11-12", EventCategory.Other, "Konsultacje", "Matematyka"));
-        Assert.Equal("[Librus] Zdarzenia na dziś, czwartek 2026-11-12: 4 (sprawdzian, kartkówka, wydarzenie…); kolejne: 0", morning.Subject);
+        Assert.Equal("[Librus] Odprawa poranna, czwartek 2026-11-12: 4 (sprawdzian, kartkówka, wydarzenie…)", morning.Subject);
     }
 
     [Fact]
@@ -541,7 +554,7 @@ public sealed class DigestMailTemplateTests
         var mail = Mail(DigestKind.Morning, new DateTime(2026, 11, 12, 6, 30, 0));
         Assert.Contains("Na dziś nie ma zdarzeń w terminarzu.", mail.HtmlBody);
         Assert.Contains("Brak kolejnych wydarzeń w terminarzu.", mail.Body);
-        Assert.Equal("[Librus] Zdarzenia na dziś, czwartek 2026-11-12: brak; kolejne: 0", mail.Subject);
+        Assert.Equal("[Librus] Odprawa poranna, czwartek 2026-11-12: brak", mail.Subject);
     }
 }
 
@@ -593,8 +606,7 @@ public sealed class DigestServiceTests : IDisposable
         db.SaveChanges();
     }
 
-    private List<OutgoingMail> Digests(string address) => _mail.To(address).Where(m => m.Subject.StartsWith("[Librus] Zdarzenia na")
-        || m.Subject.StartsWith("[Librus] Nadchodzące")).ToList();
+    private List<OutgoingMail> Digests(string address) => _mail.To(address).Where(m => DigestSubjects.IsDigest(m.Subject)).ToList();
 
     private static ElementEntity UpcomingTest(string date = "2026-11-19") => DigestElements.Schedule(date, "Sprawdzian", "Fizyka", "2", "X");
 
@@ -614,7 +626,7 @@ public sealed class DigestServiceTests : IDisposable
 
         var parent = Assert.Single(Digests(Parent));
         var student = Assert.Single(Digests(Student));
-        Assert.StartsWith("[Librus] Zdarzenia na dziś, czwartek 2026-11-12: 1 (sprawdzian); kolejne: 1", parent.Subject);
+        Assert.Equal("[Librus] Odprawa poranna, czwartek 2026-11-12: 1 (sprawdzian)", parent.Subject);
         Assert.Equal(parent.Subject, student.Subject);
         Assert.Equal(1, stats.Snapshot().DigestsSent[RecipientGroup.Parents]);
         Assert.Equal(1, stats.Snapshot().DigestsSent[RecipientGroup.Student]);
@@ -637,7 +649,7 @@ public sealed class DigestServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task EveryDigestEndsWithTheGradeTableOfTheCurrentSemester()
+    public async Task AfternoonDigestEndsWithTheGradeTableOfTheCurrentSemesterAndMorningHasNone()
     {
         Seed(UpcomingTest(),
             DigestElements.Grade("Matematyka", "5", "2026-10-10"), DigestElements.Grade("Matematyka", "4+", "2026-11-03"),
@@ -652,13 +664,17 @@ public sealed class DigestServiceTests : IDisposable
 
         var mails = Digests(Parent);
         Assert.Equal(2, mails.Count); // poranne i popołudniowe
-        foreach (var mail in mails)
-        {
-            Assert.Contains("Oceny z bieżącego semestru", mail.HtmlBody);
-            Assert.Contains("Język polski: 3\nMatematyka: 5, 4+", mail.Body.Replace("\r\n", "\n"));
-            Assert.DoesNotContain("Fizyka: 1", mail.Body);
-            Assert.DoesNotContain("Chemia: 2", mail.Body);
-        }
+        var (morning, afternoon) = (mails[0], mails[1]);
+        Assert.StartsWith("[Librus] Odprawa poranna", morning.Subject);
+        Assert.DoesNotContain("Oceny z bieżącego semestru", morning.HtmlBody);
+        Assert.DoesNotContain("OCENY Z BIEŻĄCEGO SEMESTRU", morning.Body);
+        Assert.DoesNotContain("Matematyka: 5", morning.Body);
+
+        Assert.StartsWith("[Librus] Zdarzenia na jutro", afternoon.Subject);
+        Assert.Contains("Oceny z bieżącego semestru", afternoon.HtmlBody);
+        Assert.Contains("Język polski: 3\nMatematyka: 5, 4+", afternoon.Body.Replace("\r\n", "\n"));
+        Assert.DoesNotContain("Fizyka: 1", afternoon.Body);
+        Assert.DoesNotContain("Chemia: 2", afternoon.Body);
     }
 
     [Fact]
@@ -667,7 +683,7 @@ public sealed class DigestServiceTests : IDisposable
         Seed(UpcomingTest(),
             DigestElements.Grade("Matematyka", "5", "2026-10-10"),
             DigestElements.Grade("Fizyka", "2", "2026-10-11", student: false));
-        var (service, _, _, _) = Create(new DateTime(2026, 11, 12, 6, 30, 0));
+        var (service, _, _, _) = Create(new DateTime(2026, 11, 12, 15, 0, 0));
 
         await service.RunDueAsync(CancellationToken.None);
 
@@ -681,7 +697,7 @@ public sealed class DigestServiceTests : IDisposable
     public async Task GradeTableSaysThereAreNoGradesAndSummerHasNoTable()
     {
         Seed(UpcomingTest("2027-09-02"));
-        var (service, clock, _, _) = Create(new DateTime(2026, 11, 12, 6, 30, 0));
+        var (service, clock, _, _) = Create(new DateTime(2026, 11, 12, 15, 0, 0));
         await service.RunDueAsync(CancellationToken.None);
         Assert.Contains("Brak ocen w bieżącym semestrze.", Digests(Parent).Single().Body);
 
@@ -728,7 +744,7 @@ public sealed class DigestServiceTests : IDisposable
         clock.SetLocal(new DateTime(2027, 1, 20, 6, 30, 0)); // ferie
         await service.RunDueAsync(CancellationToken.None);
 
-        Assert.DoesNotContain(_mail.Sent, m => m.Subject.Contains("na dziś"));
+        Assert.DoesNotContain(_mail.Sent, m => m.Subject.Contains("Odprawa poranna"));
     }
 
     [Fact]
@@ -801,7 +817,7 @@ public sealed class DigestServiceTests : IDisposable
 
         await service.RunDueAsync(CancellationToken.None);
 
-        Assert.StartsWith("[Librus] Zdarzenia na dziś, czwartek 2026-11-12", Assert.Single(Digests(Parent)).Subject);
+        Assert.StartsWith("[Librus] Odprawa poranna, czwartek 2026-11-12", Assert.Single(Digests(Parent)).Subject);
         Assert.Single(Digests(Student));
 
         // O 15:00 wychodzi jeszcze popołudniowe (osobny termin), poranne już nie wraca.
@@ -826,7 +842,7 @@ public sealed class DigestServiceTests : IDisposable
 
         Assert.StartsWith("[Librus] Zdarzenia na jutro, piątek 2026-11-13", Assert.Single(Digests(Parent)).Subject);
         Assert.StartsWith("[Librus] Zdarzenia na jutro, piątek 2026-11-13", Assert.Single(Digests(Student)).Subject);
-        Assert.DoesNotContain(_mail.Sent, m => m.Subject.Contains("na dziś"));
+        Assert.DoesNotContain(_mail.Sent, m => m.Subject.Contains("Odprawa poranna"));
         Assert.Contains(_log.Messages(LogLevel.Info), m => m.Contains("pominięte") && m.Contains("poranne") && m.Contains("popołudniowe"));
         using var db = _db.Create();
         Assert.Equal([DigestKind.Afternoon, DigestKind.Afternoon], await db.DigestLogs.Select(d => d.Kind).ToListAsync());
@@ -844,7 +860,7 @@ public sealed class DigestServiceTests : IDisposable
         await restarted.RunDueAsync(CancellationToken.None);
 
         Assert.Equal(4, _mail.Sent.Count);
-        Assert.Equal(["na dziś", "na jutro"], Digests(Parent).Select(m => m.Subject.Contains("na dziś") ? "na dziś" : "na jutro"));
+        Assert.Equal(["poranne", "na jutro"], Digests(Parent).Select(m => m.Subject.Contains("Odprawa poranna") ? "poranne" : "na jutro"));
         Assert.DoesNotContain(_log.Messages(LogLevel.Info), m => m.Contains("pominięte"));
     }
 
@@ -933,7 +949,7 @@ public sealed class DigestServiceTests : IDisposable
         var digestTimes = new List<DateTime>();
         h.Mail.Failure = mail =>
         {
-            if (mail.Subject.StartsWith("[Librus] Zdarzenia na dziś", StringComparison.Ordinal)) digestTimes.Add(h.Clock.Now);
+            if (mail.Subject.StartsWith("[Librus] Odprawa poranna", StringComparison.Ordinal)) digestTimes.Add(h.Clock.Now);
             return null;
         };
         var loop = new PingLoop(new PollingScheduler(h.Clock.Today, windows, new FixedRandom(0.5)), h.Cycle, h.Clock, guard, h.Log, h.Admin,
@@ -971,7 +987,7 @@ public sealed class DigestServiceTests : IDisposable
         h.Student.OnLogin = () => order.Add("ping:uczeń");
         h.Mail.Failure = mail =>
         {
-            if (mail.Subject.StartsWith("[Librus] Zdarzenia na", StringComparison.Ordinal))
+            if (DigestSubjects.IsDigest(mail.Subject))
                 order.Add(mail.To.Contains(CycleHarness.ParentAddress) ? "zestawienie:rodzice" : "zestawienie:uczeń");
             return null;
         };
@@ -1035,10 +1051,10 @@ public sealed class DigestServiceTests : IDisposable
         // Najpierw pierwszy ping obu kont, dopiero potem zestawienie – z danymi, które ten ping pobrał.
         Assert.Equal(["ping:rodzic", "ping:uczeń", "zestawienie:rodzice", "zestawienie:uczeń"], order.Take(4));
         Assert.Equal(2, order.Count(e => e.StartsWith("zestawienie", StringComparison.Ordinal)));
-        var parent = Assert.Single(h.ParentMails, m => m.Subject.StartsWith("[Librus] Zdarzenia na", StringComparison.Ordinal));
+        var parent = Assert.Single(h.ParentMails, m => DigestSubjects.IsDigest(m.Subject));
         Assert.StartsWith("[Librus] Zdarzenia na jutro, piątek 2026-11-13", parent.Subject);
         Assert.Contains("Fizyka", parent.Body);
-        Assert.DoesNotContain(h.Mail.Sent, m => m.Subject.Contains("na dziś"));
+        Assert.DoesNotContain(h.Mail.Sent, m => m.Subject.Contains("Odprawa poranna"));
         using var after = h.Db.Create();
         Assert.Equal(2, await after.DigestLogs.CountAsync());
     }

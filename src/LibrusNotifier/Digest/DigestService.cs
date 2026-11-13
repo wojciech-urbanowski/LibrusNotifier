@@ -35,7 +35,8 @@ public static class DigestSchedule
 /// Wysyła dzienne zestawienia nadchodzących wydarzeń: poranne o 6:30 i popołudniowe o 15:00, osobno dla rodziców i dla ucznia
 /// (uczeń widzi tylko wydarzenia z elementów widocznych na jego koncie). Dane pochodzą z bazy, bez żądań do Librusa.
 /// Zestawienie popołudniowe w wakacje i ferie jest wysyłane tylko wtedy, gdy są jakiekolwiek przyszłe wydarzenia.
-/// Na końcu każdego zestawienia jest tabela ocen z bieżącego semestru (<see cref="GradeTable"/>), też z bazy.
+/// Na końcu zestawienia popołudniowego jest tabela ocen z bieżącego semestru (<see cref="GradeTable"/>), też z bazy; poranne
+/// („Odprawa poranna”) jej nie ma.
 /// Wysłane zestawienie jest zapisywane w bazie (<see cref="DigestLogEntity"/>), więc restart aplikacji nie powoduje ponownej wysyłki,
 /// a w nowo założonej bazie (bez wpisów) każde zestawienie, którego termin już minął, jest należne.
 /// Zestawienie, którego termin minął przed startem aplikacji, wychodzi po pierwszym pingu (kolejność pilnuje <see cref="Scheduling.PingLoop"/>)
@@ -108,7 +109,10 @@ public sealed class DigestService(IMailSender sender, IReadOnlyList<string> pare
             }
 
             var elements = await db.Elements.AsNoTracking().Where(e => DigestEventBuilder.SourceTypes.Contains(e.Type)).ToListAsync(ct);
-            var grades = await db.Elements.AsNoTracking().Where(e => e.Type == ElementTypes.Grade).ToListAsync(ct);
+            // Tabela ocen tylko w popołudniowym; poranne („Odprawa poranna”) to sama lista wydarzeń.
+            var grades = kind == DigestKind.Afternoon
+                ? await db.Elements.AsNoTracking().Where(e => e.Type == ElementTypes.Grade).ToListAsync(ct)
+                : [];
             var baselines = await db.Baselines.AsNoTracking().ToListAsync(ct);
             var events = DigestEventBuilder.Build(elements, baselines, group, calendar);
             var digest = DigestBuilder.Build(kind, events, clock, calendar);
@@ -120,7 +124,7 @@ public sealed class DigestService(IMailSender sender, IReadOnlyList<string> pare
                 return;
             }
 
-            var gradeTable = GradeTable.Build(grades, baselines, group, today);
+            var gradeTable = kind == DigestKind.Afternoon ? GradeTable.Build(grades, baselines, group, today) : null;
             var mail = DigestMailTemplates.Build(digest, recipients, clock, calendar, DataAsOf(baselines), gradeTable);
             try
             {

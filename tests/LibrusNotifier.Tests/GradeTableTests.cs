@@ -244,13 +244,14 @@ public sealed class DigestGradeTableMailTests
 
     private static OutgoingMail Mail(GradeTable? grades, DateTime? dataAsOf = null)
     {
-        var clock = new FakeClock(new DateTime(2026, 11, 12, 6, 30, 0));
+        // Tabela ocen jest tylko w zestawieniu popołudniowym (w porannym wywołujący przekazuje null).
+        var clock = new FakeClock(new DateTime(2026, 11, 12, 15, 0, 0));
         var events = new[]
         {
-            new DigestEvent(new DateOnly(2026, 11, 12), EventCategory.Test, "Sprawdzian", 2, "", "Fizyka", "", "", EventSource.Schedule),
-            new DigestEvent(new DateOnly(2026, 11, 13), EventCategory.Quiz, "Kartkówka", 3, "", "Chemia", "", "", EventSource.Schedule)
+            new DigestEvent(new DateOnly(2026, 11, 13), EventCategory.Quiz, "Kartkówka", 3, "", "Chemia", "", "", EventSource.Schedule),
+            new DigestEvent(new DateOnly(2026, 11, 16), EventCategory.Test, "Sprawdzian", 2, "", "Fizyka", "", "", EventSource.Schedule)
         };
-        return DigestMailTemplates.Build(DigestBuilder.Build(DigestKind.Morning, events, clock, Calendar), ["rodzic@example.com"], clock, Calendar, dataAsOf, grades);
+        return DigestMailTemplates.Build(DigestBuilder.Build(DigestKind.Afternoon, events, clock, Calendar), ["rodzic@example.com"], clock, Calendar, dataAsOf, grades);
     }
 
     [Fact]

@@ -65,14 +65,15 @@ schtasks /Create /TN "LibrusNotifier" /SC DAILY /ST 00:05 /TR "C:\LibrusNotifier
   przyszłą datę, jest zgłaszany. Gdy w tym samym cyklu pojawił się wpis o tej samej treści i innej dacie, przychodzi jeden
   mail „Zmiana terminu” zamiast „nowy wpis”; w pozostałych przypadkach „Usunięto …” (z podpowiedzią o możliwym przeniesieniu,
   gdy da się ją ustalić). Szczegóły w sekcji 6 specyfikacji.
-- Zestawienia dzienne (sekcja 8 specyfikacji): o 6:30 w dni nauki lista „Dzisiaj” i kolejnych wydarzeń, o 15:00 lista „Jutro”
+- Zestawienia dzienne (sekcja 8 specyfikacji): o 6:30 w dni nauki „Odprawa poranna” z listą „Dzisiaj” i kolejnych wydarzeń
+  (temat tylko o dzisiejszym dniu, bez tabeli ocen), o 15:00 lista „Jutro”
   (albo pierwszego dnia nauki po wolnym) i kolejnych; w wakacje i ferie popołudniowe tylko wtedy, gdy są przyszłe
   wydarzenia. Powstają wyłącznie z danych w bazie, bez żądań do Librusa, i zawsze po pingu: ping w toku jest dokańczany
   (oba konta), a zestawienie zaległe po starcie aplikacji (także w nowej bazie) wychodzi po pierwszym pingu; po 15:00,
   gdy dziś nic jeszcze nie wysłano, wychodzi tylko popołudniowe. Rodzaje wydarzeń mają pastelowe kolory
   (sprawdzian – czerwony mocniejszy, kartkówka – czerwony lżejszy, zadanie domowe – fioletowy, zastępstwo – zielony,
-  odwołane zajęcia – pomarańczowy, dzień wolny – niebieski, wydarzenie – żółty, inne – szary). Na końcu zestawienia jest
-  tabela ocen z bieżącego semestru: wiersze to przedmioty (alfabetycznie), kolumny to oceny (same wartości,
+  odwołane zajęcia – pomarańczowy, dzień wolny – niebieski, wydarzenie – żółty, inne – szary). Na końcu zestawienia
+  popołudniowego jest tabela ocen z bieżącego semestru: wiersze to przedmioty (alfabetycznie), kolumny to oceny (same wartości,
   od najstarszej do najnowszej) w kolorach jak w mailu o nowej ocenie; w wakacje (lipiec, sierpień) tabeli nie ma.
 - Kopia zapasowa bazy: przy każdym starcie (przed migracją) powstaje `data/backups/librus-RRRR-MM-DD_GGmm.db` (czas
   z dokładnością do minuty; jeśli plik o tej nazwie już jest, kopii się nie powtarza). Kopie starsze niż miesiąc są kasowane.
