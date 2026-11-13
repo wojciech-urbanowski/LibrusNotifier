@@ -108,7 +108,7 @@ public sealed class DateAnnotationTests
 
         Assert.Equal("[Librus] Terminarz: Sprawdzian - Matematyka, 2026-11-13 (piątek, jutro)", mail.Subject);
         Assert.Contains("Data: 2026-11-13 (piątek, jutro)", mail.Body);
-        Assert.Matches(@">Data</th><td[^>]*><strong>2026-11-13 \(piątek, jutro\)</strong></td>", mail.HtmlBody);
+        Assert.Matches(@"font-size:16px;[^>]*><strong>2026-11-13 \(piątek, jutro\)</strong></div>", mail.HtmlBody);
         Assert.DoesNotContain("<strong>", mail.Body);
     }
 
@@ -139,7 +139,8 @@ public sealed class DateAnnotationTests
 
         Assert.Contains("Data: 2026-11-12 18:56:07 (czwartek)", mail.Body);
         Assert.Contains("Wyjazd 2026-11-13 (piątek, jutro)", mail.Body);
-        Assert.Matches(@">Data</th><td[^>]*>2026-11-12 18:56:07 \(czwartek\)</td>", mail.HtmlBody);
+        Assert.Matches(@"color:#777777;"">2026-11-12 18:56:07 \(czwartek\)</div>", mail.HtmlBody);
+        Assert.DoesNotContain("<strong>2026-11-12", mail.HtmlBody);
         Assert.Contains("<strong>2026-11-13 (piątek, jutro)</strong>", mail.HtmlBody);
         Assert.DoesNotContain("dziś", mail.HtmlBody);
     }
@@ -162,7 +163,7 @@ public sealed class DateAnnotationTests
 
         Assert.NotEqual("?", App.Version);
         Assert.EndsWith(footer + Environment.NewLine, mail.Body);
-        Assert.Contains(footer + "</p>", mail.HtmlBody);
+        Assert.Contains("<div>" + footer + "</div>", mail.HtmlBody);
     }
 
     [Fact]
@@ -207,7 +208,7 @@ public sealed class DateAnnotationTests
         var mail = MailTemplates.ForElement(element, ["rodzic@example.com"], clock);
 
         Assert.Contains("Termin wykonania: 2026-11-18 (środa, za 6 dni)", mail.Body);
-        Assert.Matches(@">Termin wykonania</th><td[^>]*>2026-11-18 \(środa, za 6 dni\)</td>", mail.HtmlBody);
+        Assert.Matches(@">Termin wykonania</div>\s*<div[^>]*>\s*<p[^>]*>2026-11-18 \(środa, za 6 dni\)</p>", mail.HtmlBody);
     }
 
     [Fact]
@@ -226,13 +227,14 @@ public sealed class DateAnnotationTests
         var mail = MailTemplates.ForElement(element, ["rodzic@example.com"], clock);
 
         Assert.Contains("Data dodania: 2026-11-10\n", mail.Body.Replace("\r\n", "\n"));
-        Assert.Matches(@">Data dodania</th><td[^>]*>2026-11-10</td>", mail.HtmlBody);
-        // Pole techniczne jest szare (etykieta i wartość), pozostałe pola nie.
-        Assert.Matches(@"<th[^>]*color:#777777;[^>]*>Data dodania</th><td[^>]*color:#777777;[^>]*>2026-11-10</td>", mail.HtmlBody);
-        Assert.DoesNotMatch(@"<th[^>]*color:#777777;[^>]*>(Data|Zmiana)</th>", mail.HtmlBody);
+        // Pole techniczne jest szare i bez opisu: w stopce (wszystkie linie stopki są szare), nie w karcie z datą, której dotyczy zmiana.
+        var html = mail.HtmlBody!;
+        Assert.Contains("<div>Data dodania: 2026-11-10</div>", html);
+        Assert.True(html.IndexOf("Data dodania", StringComparison.Ordinal) > html.IndexOf("</table>", StringComparison.Ordinal));
+        Assert.Matches(@"font-size:16px;[^>]*><strong>2026-11-13 \(piątek, jutro\)</strong></div>", html);
         Assert.Contains("Data: 2026-11-13 (piątek, jutro)", mail.Body);
         // „Wykryto” to data techniczna: zostaje bez opisu.
         Assert.Contains("Wykryto: 2026-11-12 10:00\n", mail.Body.Replace("\r\n", "\n"));
-        Assert.Matches(@">Wykryto</th><td[^>]*>2026-11-12 10:00</td>", mail.HtmlBody);
+        Assert.Contains("<div>Wykryto: 2026-11-12 10:00</div>", html);
     }
 }

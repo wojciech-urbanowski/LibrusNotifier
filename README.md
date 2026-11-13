@@ -105,7 +105,10 @@ kolejne numery wystąpienia.
 
 `Elements.DataJson` zawiera wszystkie pola z listy (etykieta → wartość), `DetailsJson` – szczegóły do maila.
 Mail ma temat z prefiksem `[Librus]` opisujący element (np. `[Librus] Nowa ocena: Matematyka - 5`), a w treści
-wszystkie pola, szczegóły i informację, na którym koncie element jest widoczny.
+wszystkie pola, szczegóły i informację, na którym koncie element jest widoczny. Układ jest dla telefonu, bez kolumn
+o stałej szerokości: zmiana w planie lekcji, wpis w terminarzu i wiadomość są kartą z kolorowym paskiem (w zmianie planu
+zmienione pola jako „stare -> nowe”, treść wiadomości pod kartą na całą szerokość), pozostałe typy to linie
+„etykieta: wartość”.
 
 Mail o nowej ocenie ma dodatkowo:
 

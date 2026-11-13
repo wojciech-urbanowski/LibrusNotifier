@@ -86,6 +86,10 @@ public static class DigestPalette
 
     public static bool Bold(EventCategory category) => category == EventCategory.Test;
 
+    /// <summary>Kolory plakietki z rodzajem w mailu: jasne tło i ciemny tekst (czytelne w jasnym i ciemnym motywie klienta poczty).</summary>
+    public static string BadgeColors(EventCategory category) =>
+        $"background:{Background(category)};color:{TextColor};font-weight:{(Bold(category) ? "700" : "600")};";
+
     /// <summary>Opis koloru do legendy i do zestawienia kolorów w dokumentacji.</summary>
     public static string ColorName(EventCategory category) => category switch
     {

@@ -207,7 +207,7 @@ public static class DigestMailTemplates
         foreach (var e in events)
         {
             var body = DetailLines(e, dates);
-            var head = $"<span style=\"display:inline-block;padding:1px 8px;font-size:12px;{BadgeColors(e.Category)}\">{Encode(e.Label)}</span>";
+            var head = $"<span style=\"display:inline-block;padding:1px 8px;font-size:12px;{DigestPalette.BadgeColors(e.Category)}\">{Encode(e.Label)}</span>";
             var when = WhenText(e);
             if (when.Length > 0) head += $" <span style=\"font-size:12px;\">&nbsp;{when}</span>";
 
@@ -220,12 +220,8 @@ public static class DigestMailTemplates
         }
     }
 
-    /// <summary>Kolory plakietki z rodzajem: jasne tło i ciemny tekst (czytelne w jasnym i ciemnym motywie klienta poczty).</summary>
-    private static string BadgeColors(EventCategory category) =>
-        $"background:{DigestPalette.Background(category)};color:{DigestPalette.TextColor};font-weight:{(DigestPalette.Bold(category) ? "700" : "600")};";
-
     /// <summary>Plakietka w legendzie nie zawija się.</summary>
-    private static string BadgeStyle(EventCategory category) => BadgeColors(category) + "white-space:nowrap;";
+    private static string BadgeStyle(EventCategory category) => DigestPalette.BadgeColors(category) + "white-space:nowrap;";
 
     /// <summary>„<b>Lekcja 2</b> · 08:55 - 09:40”; gdy nie ma numeru lekcji, same godziny; gdy nie ma niczego, pusty napis.</summary>
     private static string WhenText(DigestEvent e)
