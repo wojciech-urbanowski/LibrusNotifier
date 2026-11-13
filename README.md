@@ -66,7 +66,7 @@ schtasks /Create /TN "LibrusNotifier" /SC DAILY /ST 00:05 /TR "C:\LibrusNotifier
   mail „Zmiana terminu” zamiast „nowy wpis”; w pozostałych przypadkach „Usunięto …” (z podpowiedzią o możliwym przeniesieniu,
   gdy da się ją ustalić). Szczegóły w sekcji 6 specyfikacji.
 - Zestawienia dzienne (sekcja 8 specyfikacji): o 6:30 w dni nauki „Odprawa poranna” z listą „Dzisiaj” i kolejnych wydarzeń
-  (temat tylko o dzisiejszym dniu, bez tabeli ocen), o 15:00 lista „Jutro”
+  (temat tylko o dzisiejszym dniu, bez listy ocen), o 15:00 lista „Jutro”
   (albo pierwszego dnia nauki po wolnym) i kolejnych; w wakacje i ferie popołudniowe tylko wtedy, gdy są przyszłe
   wydarzenia. Powstają wyłącznie z danych w bazie, bez żądań do Librusa, i zawsze po pingu: ping w toku jest dokańczany
   (oba konta), a zestawienie zaległe po starcie aplikacji (także w nowej bazie) wychodzi po pierwszym pingu; po 15:00,
@@ -74,8 +74,9 @@ schtasks /Create /TN "LibrusNotifier" /SC DAILY /ST 00:05 /TR "C:\LibrusNotifier
   (bez kolumn, żeby szczegóły były czytelne na telefonie) z paskiem i plakietką rodzaju w pastelowym kolorze
   (sprawdzian – czerwony mocniejszy, kartkówka – czerwony lżejszy, zadanie domowe – fioletowy, zastępstwo – zielony,
   odwołane zajęcia – pomarańczowy, dzień wolny – niebieski, wydarzenie – żółty, inne – szary). Na końcu zestawienia
-  popołudniowego jest tabela ocen z bieżącego semestru: wiersze to przedmioty (alfabetycznie), kolumny to oceny (same wartości,
-  od najstarszej do najnowszej) w kolorach jak w mailu o nowej ocenie; w wakacje (lipiec, sierpień) tabeli nie ma.
+  popołudniowego jest lista ocen z bieżącego semestru: wiersz na przedmiot (alfabetycznie), w nim nazwa i oceny (same wartości,
+  od najstarszej do najnowszej) w kolorach jak w mailu o nowej ocenie; oceny zawijają się do kolejnych linii, więc lista nie
+  jest szersza niż ekran telefonu; w wakacje (lipiec, sierpień) listy nie ma.
 - Kopia zapasowa bazy: przy każdym starcie (przed migracją) powstaje `data/backups/librus-RRRR-MM-DD_GGmm.db` (czas
   z dokładnością do minuty; jeśli plik o tej nazwie już jest, kopii się nie powtarza). Kopie starsze niż miesiąc są kasowane.
   Nieudana kopia wstrzymuje kasowanie starych.

@@ -13,7 +13,7 @@ namespace LibrusNotifier.Mail;
 /// Treść maila z dziennym zestawieniem nadchodzących wydarzeń (HTML + tekst zapasowy). Każde wydarzenie to osobna ramka (karta) z paskiem
 /// i plakietką typu w pastelowym kolorze rodzaju (<see cref="DigestPalette"/>); karta zajmuje całą szerokość, bo maile czyta się głównie
 /// na telefonie. Sekcja główna (dziś / jutro / pierwszy dzień nauki po wolnym) jest wyróżniona w ramce.
-/// W zestawieniu popołudniowym na końcu (przed stopką) jest tabela ocen z bieżącego semestru (<see cref="GradeTable"/>), kolorowana
+/// W zestawieniu popołudniowym na końcu (przed stopką) jest lista ocen z bieżącego semestru (<see cref="GradeTable"/>), kolorowana
 /// jak oceny w mailu o nowej ocenie; poranne („Odprawa poranna”) jej nie ma (wywołujący przekazuje wtedy <c>null</c>).
 /// </summary>
 public static class DigestMailTemplates
@@ -24,14 +24,13 @@ public static class DigestMailTemplates
     // (jasne tło + ciemny tekst), reszta dziedziczy motyw klienta; ramki i przygaszony tekst są w średnim szarym.
     private const string PageStyle = "margin:0;padding:16px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.45;";
     private const string TableStyle = "border-collapse:collapse;width:100%;max-width:760px;margin:0 0 8px;";
-    private const string HeadCellStyle = "border:1px solid #999999;padding:4px 10px;text-align:left;vertical-align:top;font-size:12px;font-weight:600;background:rgba(128,128,128,0.15);";
     // Karta wydarzenia: ramka z kolorowym paskiem z lewej (kolor dopisywany osobno); długie słowa (np. adresy) łamią się, zamiast poszerzać mail.
     private const string CardCellStyle = "border:1px solid #999999;padding:8px 10px;text-align:left;vertical-align:top;word-break:break-word;overflow-wrap:anywhere;";
     private const string MutedStyle = "color:#777777;";
     private const string PrimaryBoxStyle = "margin:0 0 8px;padding:8px 14px;border-left:6px solid #4a7dbf;background:rgba(74,125,191,0.16);max-width:740px;";
     private const string BannerStyle = "margin:0 0 16px;padding:8px 14px;border:1px solid #c9a227;background:rgba(255,200,0,0.18);max-width:740px;";
 
-    /// <param name="grades">Tabela ocen z bieżącego semestru na końcu maila (przed stopką); <c>null</c> (zestawienie poranne, wakacje letnie) - bez tabeli.</param>
+    /// <param name="grades">Lista ocen z bieżącego semestru na końcu maila (przed stopką); <c>null</c> (zestawienie poranne, wakacje letnie) - bez listy.</param>
     public static OutgoingMail Build(DailyDigest digest, IReadOnlyList<string> to, Clock clock, SchoolCalendar calendar, DateTime? dataAsOfLocal = null,
         GradeTable? grades = null)
     {
@@ -256,21 +255,26 @@ public static class DigestMailTemplates
         html.AppendLine("</p>");
     }
 
-    // ---------- tabela ocen ----------
+    // ---------- lista ocen ----------
 
     private const string GradesHeading = "Oceny z bieżącego semestru";
     private const string NoGradesText = "Brak ocen w bieżącym semestrze.";
-    // Nazwa przedmiotu może się zawijać (na wąskim ekranie tabela z wieloma ocenami i tak jest szeroka); oceny są zawsze w jednej linii.
-    private const string GradeLabelCellStyle = "border:1px solid #999999;padding:4px 8px;text-align:left;vertical-align:top;font-weight:600;background:rgba(128,128,128,0.15);";
-    private const string GradeCellStyle = "border:1px solid #999999;padding:4px 6px;min-width:18px;text-align:center;vertical-align:top;white-space:nowrap;";
+    // Lista, nie tabela: nic nie ma stałej szerokości, więc nigdy nie jest szersza niż ekran telefonu (oceny zawijają się do kolejnych linii).
+    private const string GradeListStyle = "margin:0 0 8px;border-bottom:1px solid rgba(128,128,128,0.4);max-width:760px;";
+    private const string GradeRowStyle = "border-top:1px solid rgba(128,128,128,0.4);padding:6px 0 3px;";
+    private const string GradeSubjectStyle = "margin-right:6px;";
+    // Pole z oceną jest niepodzielne (white-space:nowrap), a zawijają się całe pola; kolor dopisywany osobno (GradePalette.CellStyle).
+    private const string GradeChipStyle = "display:inline-block;min-width:18px;padding:2px 4px;margin:0 0 3px;border:1px solid #999999;text-align:center;white-space:nowrap;";
 
     private static string GradesSubtitle(GradeTable grades) =>
         $"Semestr {grades.Semester}, rok szkolny {grades.SchoolYearName}; oceny od najstarszej do najnowszej.";
 
     /// <summary>
-    /// Tabela na końcu maila: wiersz na przedmiot (alfabetycznie), w nim kolejne oceny z semestru (chronologicznie), każda w osobnej
-    /// komórce z kolorem wg skali (<see cref="GradePalette"/>, tak samo jak w mailu o nowej ocenie). Wiersze mają różną liczbę ocen,
-    /// więc nagłówek „Oceny” obejmuje najdłuższy z nich, a krótsze wiersze po prostu się kończą.
+    /// Lista na końcu maila: wiersz na przedmiot (alfabetycznie), w nim nazwa pogrubiona i zaraz za nią kolejne oceny z semestru
+    /// (chronologicznie), każda w osobnym polu z kolorem wg skali (<see cref="GradePalette"/>, tak samo jak w mailu o nowej ocenie).
+    /// Nazwa i oceny płyną w jednej linii (przedmiot z kilkoma ocenami zajmuje jeden wiersz), a dłuższe zawijają się pod nazwę, więc na
+    /// wąskim ekranie telefonu nic nie wychodzi poza szerokość (wcześniej tabela z kolumnami na oceny miała po kilkaset pikseli).
+    /// Wiersze rozdziela cienka linia; role „list” i „listitem” mówią czytnikom ekranu, że to lista przedmiotów.
     /// </summary>
     private static void AppendGradesHtml(StringBuilder html, GradeTable grades)
     {
@@ -282,18 +286,13 @@ public static class DigestMailTemplates
             return;
         }
 
-        html.AppendLine("<table style=\"border-collapse:collapse;margin:0 0 8px;\">")
-            .AppendLine("<thead>")
-            .AppendLine($"<tr><th scope=\"col\" style=\"{HeadCellStyle}\">Przedmiot</th><th scope=\"col\" colspan=\"{grades.Columns}\" style=\"{HeadCellStyle}\">Oceny</th></tr>")
-            .AppendLine("</thead>")
-            .AppendLine("<tbody>");
+        html.AppendLine($"<div role=\"list\" style=\"{GradeListStyle}\">");
         foreach (var row in grades.Rows)
         {
-            html.Append($"<tr><th scope=\"row\" style=\"{GradeLabelCellStyle}\">{Encode(row.Subject)}</th>");
-            foreach (var mark in row.Marks) html.Append($"<td style=\"{GradeCellStyle}{GradePalette.CellStyle(mark)}\">{Encode(mark)}</td>");
-            html.AppendLine("</tr>");
+            var marks = string.Join(" ", row.Marks.Select(mark => $"<span style=\"{GradeChipStyle}{GradePalette.CellStyle(mark)}\">{Encode(mark)}</span>"));
+            html.AppendLine($"<div role=\"listitem\" style=\"{GradeRowStyle}\"><strong style=\"{GradeSubjectStyle}\">{Encode(row.Subject)}</strong> {marks}</div>");
         }
-        html.AppendLine("</tbody>").AppendLine("</table>");
+        html.AppendLine("</div>");
     }
 
     private static string Encode(string text) => WebUtility.HtmlEncode(text);
