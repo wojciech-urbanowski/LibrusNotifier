@@ -173,7 +173,7 @@ Dwa razy dziennie aplikacja wysyła mail z chronologiczną listą nadchodzących
 
 - **Jutro wolne (popołudniowe).** Gdy jutro nie ma nauki (weekend, święto, ferie, wakacje), zamiast „Jutro” pierwszą, wyróżnioną sekcją jest pierwszy dzień nauki po wolnym: „Poniedziałek” po zwykłym weekendzie, w pozostałych przypadkach z datą, np. „Wtorek, 2.11.2027”. Nad sekcjami jest baner z powodem wolnego. Dopiero po niej idzie lista kolejnych wydarzeń.
 - **Kolejne wydarzenia.** Wszystkie wydarzenia po dzisiejszym dniu (poza dniem sekcji głównej), chronologicznie i pogrupowane po dniach; zakres wyznacza to, co jest w bazie (terminarz: bieżący i następny miesiąc). Sekcje bez wydarzeń zostają w mailu z krótkim komunikatem.
-- **Rodzaje i kolory.** Pole z typem wydarzenia ma pastelowe tło i ciemny tekst (czytelne w jasnym i ciemnym motywie klienta poczty); pod listą jest legenda użytych kolorów.
+- **Rodzaje i kolory.** Każde wydarzenie to osobna karta na całą szerokość maila, bez kolumn (maile czyta się głównie na telefonie, a tabela z kolumnami zostawiała szczegółom kilkadziesiąt pikseli). Z lewej strony karty jest pasek w kolorze rodzaju, w pierwszej linii plakietka z nazwą rodzaju (pastelowe tło i ciemny tekst, czytelne w jasnym i ciemnym motywie klienta poczty) oraz „Lekcja N” z godzinami (same godziny, gdy nie ma numeru lekcji; nic, gdy nie ma żadnego z nich), niżej przedmiot, opis i nauczyciel. Pod listą jest legenda użytych kolorów.
 
 | Rodzaj | Rozpoznanie | Kolor |
 | --- | --- | --- |

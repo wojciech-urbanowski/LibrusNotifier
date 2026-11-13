@@ -70,7 +70,8 @@ schtasks /Create /TN "LibrusNotifier" /SC DAILY /ST 00:05 /TR "C:\LibrusNotifier
   (albo pierwszego dnia nauki po wolnym) i kolejnych; w wakacje i ferie popołudniowe tylko wtedy, gdy są przyszłe
   wydarzenia. Powstają wyłącznie z danych w bazie, bez żądań do Librusa, i zawsze po pingu: ping w toku jest dokańczany
   (oba konta), a zestawienie zaległe po starcie aplikacji (także w nowej bazie) wychodzi po pierwszym pingu; po 15:00,
-  gdy dziś nic jeszcze nie wysłano, wychodzi tylko popołudniowe. Rodzaje wydarzeń mają pastelowe kolory
+  gdy dziś nic jeszcze nie wysłano, wychodzi tylko popołudniowe. Każde wydarzenie to osobna karta na całą szerokość
+  (bez kolumn, żeby szczegóły były czytelne na telefonie) z paskiem i plakietką rodzaju w pastelowym kolorze
   (sprawdzian – czerwony mocniejszy, kartkówka – czerwony lżejszy, zadanie domowe – fioletowy, zastępstwo – zielony,
   odwołane zajęcia – pomarańczowy, dzień wolny – niebieski, wydarzenie – żółty, inne – szary). Na końcu zestawienia
   popołudniowego jest tabela ocen z bieżącego semestru: wiersze to przedmioty (alfabetycznie), kolumny to oceny (same wartości,

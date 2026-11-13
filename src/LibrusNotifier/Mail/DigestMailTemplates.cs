@@ -10,8 +10,9 @@ using LibrusNotifier.Timing;
 namespace LibrusNotifier.Mail;
 
 /// <summary>
-/// Treść maila z dziennym zestawieniem nadchodzących wydarzeń (HTML + tekst zapasowy). Pola z typem zdarzenia mają pastelowe kolory
-/// (<see cref="DigestPalette"/>); sekcja główna (dziś / jutro / pierwszy dzień nauki po wolnym) jest wyróżniona w ramce.
+/// Treść maila z dziennym zestawieniem nadchodzących wydarzeń (HTML + tekst zapasowy). Każde wydarzenie to osobna ramka (karta) z paskiem
+/// i plakietką typu w pastelowym kolorze rodzaju (<see cref="DigestPalette"/>); karta zajmuje całą szerokość, bo maile czyta się głównie
+/// na telefonie. Sekcja główna (dziś / jutro / pierwszy dzień nauki po wolnym) jest wyróżniona w ramce.
 /// W zestawieniu popołudniowym na końcu (przed stopką) jest tabela ocen z bieżącego semestru (<see cref="GradeTable"/>), kolorowana
 /// jak oceny w mailu o nowej ocenie; poranne („Odprawa poranna”) jej nie ma (wywołujący przekazuje wtedy <c>null</c>).
 /// </summary>
@@ -24,7 +25,8 @@ public static class DigestMailTemplates
     private const string PageStyle = "margin:0;padding:16px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.45;";
     private const string TableStyle = "border-collapse:collapse;width:100%;max-width:760px;margin:0 0 8px;";
     private const string HeadCellStyle = "border:1px solid #999999;padding:4px 10px;text-align:left;vertical-align:top;font-size:12px;font-weight:600;background:rgba(128,128,128,0.15);";
-    private const string CellStyle = "border:1px solid #999999;padding:6px 10px;text-align:left;vertical-align:top;word-break:break-word;";
+    // Karta wydarzenia: ramka z kolorowym paskiem z lewej (kolor dopisywany osobno); długie słowa (np. adresy) łamią się, zamiast poszerzać mail.
+    private const string CardCellStyle = "border:1px solid #999999;padding:8px 10px;text-align:left;vertical-align:top;word-break:break-word;overflow-wrap:anywhere;";
     private const string MutedStyle = "color:#777777;";
     private const string PrimaryBoxStyle = "margin:0 0 8px;padding:8px 14px;border-left:6px solid #4a7dbf;background:rgba(74,125,191,0.16);max-width:740px;";
     private const string BannerStyle = "margin:0 0 16px;padding:8px 14px;border:1px solid #c9a227;background:rgba(255,200,0,0.18);max-width:740px;";
@@ -183,7 +185,7 @@ public static class DigestMailTemplates
             {
                 if (!section.Primary)
                     html.AppendLine($"<h3 style=\"margin:14px 0 6px;font-size:14px;font-weight:600;\">{Encode(DigestBuilder.DayHeading(day.Date, dates))}</h3>");
-                AppendTable(html, day.Events, dates);
+                AppendEventCards(html, day.Events, dates);
             }
         }
 
@@ -197,42 +199,51 @@ public static class DigestMailTemplates
         return html.ToString();
     }
 
-    private static void AppendTable(StringBuilder html, IReadOnlyList<DigestEvent> events, DateAnnotator dates)
+    /// <summary>
+    /// Każde wydarzenie to osobna tabela z jedną komórką (karta): pasek w kolorze rodzaju z lewej, w pierwszej linii plakietka z rodzajem,
+    /// numer lekcji i godziny, niżej przedmiot, opis i nauczyciel. Brak kolumn, więc na wąskim ekranie telefonu szczegóły mają całą szerokość.
+    /// </summary>
+    private static void AppendEventCards(StringBuilder html, IReadOnlyList<DigestEvent> events, DateAnnotator dates)
     {
-        html.AppendLine($"<table style=\"{TableStyle}\">").AppendLine("<thead>").AppendLine("<tr>");
-        html.AppendLine($"<th scope=\"col\" style=\"{HeadCellStyle}width:140px;\">Typ</th>")
-            .AppendLine($"<th scope=\"col\" style=\"{HeadCellStyle}width:90px;\">Lekcja</th>")
-            .AppendLine($"<th scope=\"col\" style=\"{HeadCellStyle}\">Szczegóły</th>")
-            .AppendLine("</tr>").AppendLine("</thead>").AppendLine("<tbody>");
         foreach (var e in events)
         {
-            html.AppendLine("<tr>");
-            html.AppendLine($"<td style=\"{CellStyle}{BadgeStyle(e.Category)}\">{Encode(e.Label)}</td>")
-                .AppendLine($"<td style=\"{CellStyle}\">{LessonCell(e)}</td>")
-                .AppendLine($"<td style=\"{CellStyle}\">{DetailsCell(e, dates)}</td>")
-                .AppendLine("</tr>");
+            var body = DetailLines(e, dates);
+            var head = $"<span style=\"display:inline-block;padding:1px 8px;font-size:12px;{BadgeColors(e.Category)}\">{Encode(e.Label)}</span>";
+            var when = WhenText(e);
+            if (when.Length > 0) head += $" <span style=\"font-size:12px;\">&nbsp;{when}</span>";
+
+            html.AppendLine($"<table role=\"presentation\" style=\"{TableStyle}\">")
+                .AppendLine("<tr>")
+                .AppendLine($"<td style=\"{CardCellStyle}border-left:6px solid {DigestPalette.Background(e.Category)};\">")
+                .AppendLine(body.Count > 0 ? $"<div style=\"margin:0 0 4px;\">{head}</div>" : $"<div>{head}</div>");
+            if (body.Count > 0) html.AppendLine(string.Join("<br>\n", body));
+            html.AppendLine("</td>").AppendLine("</tr>").AppendLine("</table>");
         }
-        html.AppendLine("</tbody>").AppendLine("</table>");
     }
 
-    private static string BadgeStyle(EventCategory category) =>
-        $"background:{DigestPalette.Background(category)};color:{DigestPalette.TextColor};font-weight:{(DigestPalette.Bold(category) ? "700" : "600")};white-space:nowrap;";
+    /// <summary>Kolory plakietki z rodzajem: jasne tło i ciemny tekst (czytelne w jasnym i ciemnym motywie klienta poczty).</summary>
+    private static string BadgeColors(EventCategory category) =>
+        $"background:{DigestPalette.Background(category)};color:{DigestPalette.TextColor};font-weight:{(DigestPalette.Bold(category) ? "700" : "600")};";
 
-    private static string LessonCell(DigestEvent e)
+    /// <summary>Plakietka w legendzie nie zawija się.</summary>
+    private static string BadgeStyle(EventCategory category) => BadgeColors(category) + "white-space:nowrap;";
+
+    /// <summary>„<b>Lekcja 2</b> · 08:55 - 09:40”; gdy nie ma numeru lekcji, same godziny; gdy nie ma niczego, pusty napis.</summary>
+    private static string WhenText(DigestEvent e)
     {
-        var lesson = e.Lesson is { } number ? $"<strong>{number}</strong>" : "";
-        var hours = e.Hours.Length > 0 ? $"<span style=\"font-size:12px;{MutedStyle}\">{Encode(e.Hours)}</span>" : "";
-        if (lesson.Length == 0 && hours.Length == 0) return $"<span style=\"{MutedStyle}\">-</span>";
-        return lesson.Length > 0 && hours.Length > 0 ? lesson + "<br>" + hours : lesson + hours;
+        var parts = new List<string>();
+        if (e.Lesson is { } number) parts.Add($"<strong>Lekcja {number}</strong>");
+        if (e.Hours.Length > 0) parts.Add($"<span style=\"{MutedStyle}\">{Encode(e.Hours)}</span>");
+        return string.Join($" <span style=\"{MutedStyle}\">·</span> ", parts);
     }
 
-    private static string DetailsCell(DigestEvent e, DateAnnotator dates)
+    private static List<string> DetailLines(DigestEvent e, DateAnnotator dates)
     {
         var lines = new List<string>();
         if (e.Subject.Length > 0) lines.Add($"<strong>{Encode(e.Subject)}</strong>");
         if (e.Detail.Length > 0) lines.Add(dates.Html(e.Detail));
         if (e.Note.Length > 0) lines.Add($"<span style=\"font-size:12px;{MutedStyle}\">{Encode(e.Note)}</span>");
-        return lines.Count == 0 ? "&nbsp;" : string.Join("<br>\n", lines);
+        return lines;
     }
 
     private static void AppendLegend(StringBuilder html, DailyDigest digest)

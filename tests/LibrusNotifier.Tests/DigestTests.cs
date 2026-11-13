@@ -450,7 +450,7 @@ public sealed class DigestMailTemplateTests
     }
 
     [Fact]
-    public void HtmlColorsTypeFieldsAndHasNoCheckboxColumn()
+    public void HtmlShowsEachEventAsColoredCardWithoutColumns()
     {
         var mail = Mail(DigestKind.Morning, new DateTime(2026, 11, 12, 6, 30, 0),
             Event("2026-11-12", EventCategory.Test, "Sprawdzian", "Język angielski", 2, "Unit 2", "Gubernat Julia"),
@@ -463,15 +463,54 @@ public sealed class DigestMailTemplateTests
         Assert.Contains("background:#d9c4f2;color:#1f1f1f", html);
         Assert.Contains("background:#b9e4c4;color:#1f1f1f", html);
         Assert.Contains("background:#fad0cc;color:#1f1f1f", html);
-        // Brak kolumny z polem do odhaczenia; tabele mają trzy kolumny (Typ, Lekcja, Szczegóły).
+        // Pasek z lewej strony karty ma kolor rodzaju.
+        Assert.Contains("border-left:6px solid #f28b82;", html);
+        Assert.Contains("border-left:6px solid #d9c4f2;", html);
+        Assert.Contains("border-left:6px solid #b9e4c4;", html);
+        Assert.Contains("border-left:6px solid #fad0cc;", html);
+        // Karta na wydarzenie (osobna tabela z jedną komórką), bez nagłówków i kolumn, bez pola do odhaczenia.
         Assert.DoesNotContain("&#9744;", html);
-        Assert.Equal(3 * (html.Split("<thead>").Length - 1), html.Split("<th ").Length - 1);
+        Assert.DoesNotContain("<th ", html);
+        Assert.DoesNotContain("<thead>", html);
+        Assert.Equal(4, html.Split("<table role=\"presentation\"").Length - 1);
+        Assert.Equal(4, html.Split("<td ").Length - 1);
+        // Numer lekcji i godziny w pierwszej linii karty, obok plakietki z rodzajem.
+        Assert.Contains("<strong>Lekcja 2</strong>", html);
+        Assert.Contains("<strong>Lekcja 1</strong>", html);
+        Assert.Contains(">08:00 - 08:45</span>", html);
         Assert.Contains("Dzisiaj", html);
         Assert.Contains("Kolejne wydarzenia", html);
         Assert.Contains("Piątek, 13.11.2026 (jutro)", html);
         Assert.Contains("Poniedziałek, 16.11.2026 (za 4 dni)", html);
         Assert.Contains("Kolory:", html);
         Assert.True(html.IndexOf("Dzisiaj", StringComparison.Ordinal) < html.IndexOf("Kolejne wydarzenia", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void CardShowsOnlyWhatTheEventHas()
+    {
+        var mail = Mail(DigestKind.Morning, new DateTime(2026, 11, 12, 6, 30, 0),
+            Event("2026-11-12", EventCategory.Homework, "Zadanie domowe", "Matematyka", null, "Zadania 5-8", "Kowalski Jan"),
+            Event("2026-11-12", EventCategory.Event, "Wydarzenie", "Apel", null, hours: "8:00"),
+            Event("2026-11-12", EventCategory.Other, "Inne", "", null));
+
+        var cards = mail.HtmlBody!.Split("<table role=\"presentation\"").Skip(1).Select(c => c[..c.IndexOf("</table>", StringComparison.Ordinal)]).ToList();
+        Assert.Equal(3, cards.Count);
+
+        // Bez lekcji i godzin pierwsza linia to sama plakietka, a pod nią przedmiot, opis i nauczyciel.
+        Assert.DoesNotContain("Lekcja", cards[0]);
+        Assert.Contains("<strong>Matematyka</strong>", cards[0]);
+        Assert.Contains("Zadania 5-8", cards[0]);
+        Assert.Contains("Kowalski Jan", cards[0]);
+
+        // Same godziny bez numeru lekcji.
+        Assert.DoesNotContain("Lekcja", cards[1]);
+        Assert.Contains(">8:00</span>", cards[1]);
+
+        // Wydarzenie bez żadnych szczegółów to sama plakietka, bez pustej linii pod nią.
+        Assert.Contains(">Inne</span>", cards[2]);
+        Assert.DoesNotContain("<strong>", cards[2]);
+        Assert.DoesNotContain("margin:0 0 4px;", cards[2]);
     }
 
     [Fact]
