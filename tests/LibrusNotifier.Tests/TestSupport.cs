@@ -50,7 +50,14 @@ internal sealed class FixedRandom(double value) : Random
     public override double NextDouble() => value;
 }
 
-internal sealed record RecordedRequest(HttpMethod Method, Uri Uri, string Body, string Cookie);
+internal sealed record RecordedRequest(HttpMethod Method, Uri Uri, string Body, string Cookie, string UserAgent,
+    IReadOnlyDictionary<string, string> Headers);
+
+internal static class TestBrowser
+{
+    /// <summary>Stały profil Chrome (z nagłówkami Client Hints) dla testów, które nie dotyczą samego losowania.</summary>
+    public static readonly BrowserProfile Profile = BrowserCatalog.All().First(p => p.Family == "Chrome" && p.Platform == "Windows");
+}
 
 internal sealed class MockHandler(Func<RecordedRequest, HttpResponseMessage> respond) : HttpMessageHandler
 {
@@ -61,7 +68,9 @@ internal sealed class MockHandler(Func<RecordedRequest, HttpResponseMessage> res
         cancellationToken.ThrowIfCancellationRequested();
         var recorded = new RecordedRequest(request.Method, request.RequestUri!,
             request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken),
-            request.Headers.TryGetValues("Cookie", out var cookies) ? string.Join("; ", cookies) : "");
+            request.Headers.TryGetValues("Cookie", out var cookies) ? string.Join("; ", cookies) : "",
+            request.Headers.UserAgent.ToString(),
+            request.Headers.ToDictionary(h => h.Key, h => string.Join(", ", h.Value), StringComparer.OrdinalIgnoreCase));
         Requests.Add(recorded);
         var response = respond(recorded);
         response.RequestMessage = request;

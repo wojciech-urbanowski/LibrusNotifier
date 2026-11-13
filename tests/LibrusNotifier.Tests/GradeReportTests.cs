@@ -110,9 +110,12 @@ public sealed class GradeMailTests
     {
         var mail = Mail(GradeElement("Matematyka", "5", "2026-11-12"));
 
-        Assert.Matches(@">Ocena</th><td[^>]*background:#8fe0a1;color:#1f1f1f;font-weight:600;[^>]*>5</td>", mail.HtmlBody);
+        var html = mail.HtmlBody!;
+        var main = html[..html.IndexOf("<h2", StringComparison.Ordinal)];
+
+        Assert.Matches(@"Ocena:</span> <span style=""[^""]*background:#8fe0a1;color:#1f1f1f;font-weight:600;[^""]*"">5</span>", main);
         // Kolorowane jest tylko pole z oceną.
-        Assert.DoesNotMatch(@">(Przedmiot|Kategoria|Waga|Nauczyciel)</th><td[^>]*background:", mail.HtmlBody);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(main, "background:"));
         Assert.DoesNotContain("background:#8fe0a1", mail.Body);
     }
 
@@ -134,7 +137,7 @@ public sealed class GradeMailTests
     {
         var mail = Mail(GradeElement("Wychowanie fizyczne", mark, "2026-11-12"));
 
-        Assert.Matches($@">Ocena</th><td[^>]*background:#e2e2e2;color:#1f1f1f;font-weight:600;[^>]*>{mark}</td>", mail.HtmlBody);
+        Assert.Matches($@"Ocena:</span> <span style=""[^""]*background:#e2e2e2;color:#1f1f1f;font-weight:600;[^""]*"">{mark}</span>", mail.HtmlBody);
         Assert.DoesNotContain("background:#8fe0a1", mail.HtmlBody); // żaden kolor ze skali
     }
 
@@ -152,7 +155,7 @@ public sealed class GradeMailTests
 
         var mail = MailTemplates.ForElement(element, Parent, _clock, subjectGrades: [element]);
 
-        Assert.Matches(@">Ocena</th><td[^>]*background:#e2e2e2;color:#1f1f1f;font-weight:600;[^>]*>5</td>", mail.HtmlBody);
+        Assert.Matches(@"Ocena:</span> <span style=""[^""]*background:#e2e2e2;color:#1f1f1f;font-weight:600;[^""]*"">5</span>", mail.HtmlBody);
         Assert.DoesNotContain("background:#8fe0a1", mail.HtmlBody); // piątka z opisowej nie jest zielona
         Assert.DoesNotContain("Oceny z przedmiotu", mail.HtmlBody);
     }
@@ -188,17 +191,17 @@ public sealed class GradeMailTests
     }
 
     [Fact]
-    public void WeightIsGrayInTheMailTableSoItIsNotMistakenForTheGrade()
+    public void WeightIsGrayInTheMailSoItIsNotMistakenForTheGrade()
     {
         var mail = Mail(GradeElement("Matematyka", "5", "2026-11-12", "Sprawdzian", "3"));
         var html = mail.HtmlBody!;
         var main = html[..html.IndexOf("<h2", StringComparison.Ordinal)];
 
-        Assert.Matches(@"<th[^>]*color:#777777;[^>]*>Waga</th><td[^>]*color:#777777;[^>]*>3</td>", main);
-        // Szare są tylko etykieta i wartość wagi, nie reszta tabeli ani sama ocena.
-        Assert.DoesNotMatch(@"<th[^>]*color:#777777;[^>]*>(Przedmiot|Ocena|Kategoria|Data|Nauczyciel)</th>", main);
-        Assert.DoesNotMatch(@">Ocena</th><td[^>]*color:#777777;", main);
-        Assert.Matches(@">Ocena</th><td[^>]*color:#1f1f1f;[^>]*>5</td>", main);
+        // Cała linia wagi jest szara (etykieta i wartość).
+        Assert.Matches(@"<div style=""[^""]*color:#777777;""><span style=""color:#777777;"">Waga:</span> 3</div>", main);
+        // Szare są tylko etykieta i wartość wagi, nie reszta linii ani sama ocena (etykiety są szare w każdej linii).
+        Assert.DoesNotMatch(@"<div style=""[^""]*color:#777777;""><span[^>]*>(Przedmiot|Ocena|Kategoria|Data|Nauczyciel):</span>", main);
+        Assert.Matches(@"Ocena:</span> <span style=""[^""]*color:#1f1f1f;[^""]*"">5</span>", main);
     }
 
     [Fact]

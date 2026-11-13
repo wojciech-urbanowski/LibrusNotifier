@@ -141,7 +141,6 @@ public static partial class DigestEventBuilder
     {
         if (!TryDate(f, "Data", out var date)) return null;
         var change = Text(f, "Zmiana");
-        var lower = change.ToLowerInvariant();
         var subject = Text(f, "Przedmiot");
         var teacherRoom = Text(f, "Nauczyciel i sala");
         var hours = Text(f, "Godziny").Trim('–', '-', ' ');
@@ -150,19 +149,33 @@ public static partial class DigestEventBuilder
         var teacherSwap = Swap(Text(f, "Nauczyciel (zmiana)"));
         var roomSwap = Swap(Text(f, "Sala (zmiana)"));
 
-        if (lower.Contains("dzień wolny", StringComparison.Ordinal))
+        var category = TimetableCategory(change);
+        if (category == EventCategory.DayOff)
             return new DigestEvent(date, EventCategory.DayOff, "Dzień wolny", null, "", "Dzień wolny od zajęć", "", "", EventSource.Timetable);
-        if (lower.Contains("odwołan", StringComparison.Ordinal))
+        if (category == EventCategory.Cancelled)
             return new DigestEvent(date, EventCategory.Cancelled, "Odwołane zajęcia", lesson, hours, subject, "", teacherRoom, EventSource.Timetable);
 
         var detail = Join(
             teacherSwap.Length > 0 ? $"Zastępstwo: {teacherSwap}" : "",
             subjectSwap.Length > 0 && !string.Equals(subjectSwap, subject, StringComparison.OrdinalIgnoreCase) ? $"Przedmiot: {subjectSwap}" : "",
             roomSwap.Length > 0 ? $"Sala: {roomSwap}" : "");
-        if (lower.Contains("zastępstw", StringComparison.Ordinal))
+        if (category == EventCategory.Substitution)
             return new DigestEvent(date, EventCategory.Substitution, "Zastępstwo", lesson, hours, subject, detail, "", EventSource.Timetable);
         return new DigestEvent(date, EventCategory.Other, change.Length > 0 ? Capitalize(change) : "Zmiana w planie", lesson, hours, subject,
             detail, teacherRoom, EventSource.Timetable);
+    }
+
+    /// <summary>
+    /// Rodzaj zmiany w planie lekcji wg pola „Zmiana” (np. „zastępstwo”, „odwołane”): wspólny dla zestawienia i maila o zmianie,
+    /// żeby zmiana miała ten sam kolor w obu. Dla innych zmian <see cref="EventCategory.Other"/>.
+    /// </summary>
+    internal static EventCategory TimetableCategory(string change)
+    {
+        var lower = change.ToLowerInvariant();
+        if (lower.Contains("dzień wolny", StringComparison.Ordinal)) return EventCategory.DayOff;
+        if (lower.Contains("odwołan", StringComparison.Ordinal)) return EventCategory.Cancelled;
+        if (lower.Contains("zastępstw", StringComparison.Ordinal)) return EventCategory.Substitution;
+        return EventCategory.Other;
     }
 
     /// <summary>Librus zapisuje zmianę jako „stare -> nowe” (brak jako „[brak]”).</summary>

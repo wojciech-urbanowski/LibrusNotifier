@@ -73,7 +73,7 @@ public sealed class InfrastructureTests : IDisposable
                 : MockHandler.Html("""[{"startDate":"2027-01-18","endDate":"2027-01-31","type":"School","name":[{"language":"PL","text":"Ferie zimowe"}]}]""",
                     mediaType: "application/json");
         });
-        var provider = new SchoolHolidayProvider(cache, clock, log, handler);
+        var provider = new SchoolHolidayProvider(cache, clock, log, TestBrowser.Profile, handler);
 
         var fetched = await provider.LoadAsync("PL-DS", CancellationToken.None);
         Assert.Equal(new SchoolHolidayPeriod(new DateOnly(2027, 1, 18), new DateOnly(2027, 1, 31), "Ferie zimowe"), Assert.Single(fetched));
@@ -198,7 +198,7 @@ public sealed class InfrastructureTests : IDisposable
     }
 
     [Fact]
-    public void MailHtmlShowsFieldsAsTableRows()
+    public void MailHtmlShowsTimetableChangeAsCard()
     {
         var clock = new FakeClock(new DateTime(2026, 11, 12, 10, 0, 0));
         var element = new ElementEntity
@@ -214,12 +214,13 @@ public sealed class InfrastructureTests : IDisposable
         var mail = MailTemplates.ForElement(element, ["rodzic@example.com"], clock);
 
         var html = Assert.IsType<string>(mail.HtmlBody);
-        Assert.Contains("<table", html);
-        Assert.Contains("scope=\"row\" style=", html);
-        Assert.Matches(@">Zmiana</th><td[^>]*>zastępstwo</td>", html);
-        Assert.Matches(@">Nauczyciel \(zmiana\)</th><td[^>]*>Michalik Aleksandra -&gt; Mirowska Karina</td>", html);
-        Assert.Matches(@">Widoczne na koncie</th><td[^>]*>rodzica i ucznia</td>", html);
-        Assert.Matches(@">Wykryto</th><td[^>]*>2026-11-12 10:00</td>", html);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<table "));
+        Assert.Matches(@">zastępstwo</span>", html);
+        Assert.Contains("Co się zmieniło", html);
+        Assert.Contains("<s style=\"color:#777777;\">Michalik Aleksandra</s> -&gt; <strong>Mirowska Karina</strong>", html);
+        Assert.Contains("<div>Widoczne na koncie: rodzica i ucznia</div>", html);
+        Assert.Contains("<div>Wykryto: 2026-11-12 10:00</div>", html);
+        Assert.DoesNotContain("<th", html);
         Assert.Contains("Zmiana: zastępstwo", mail.Body);
     }
 
@@ -245,7 +246,7 @@ public sealed class InfrastructureTests : IDisposable
         Assert.Contains("Anna &lt;b&gt;Nowak&lt;/b&gt;", html);
         Assert.Contains("Pierwsza linia<br>", html);
         Assert.Contains("Druga &amp; &lt;script&gt;alert(1)&lt;/script&gt;", html);
-        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(html, "<table style=\"border-collapse:collapse;width:100%").Count);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<table ")); // sama karta z tematem i nadawcą, treść jest pod nią
         Assert.Contains("Druga & <script>alert(1)</script>", mail.Body);
     }
 

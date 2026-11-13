@@ -83,7 +83,7 @@ public sealed class LibrusHttpTests
             var panelPath = account == AccountKind.Parent ? "/rodzic/index" : "/uczen/index";
             Handler = new MockHandler(r => Librus(r, panelPath));
             Account = new LibrusAccount(account, new AccountCredentials("rodzic1", "Sekret&Haslo"), idleLimit ?? TimeSpan.FromMinutes(9),
-                Clock, Guard, Log, Stats, Throttle, Options, () => Handler);
+                Clock, Guard, Log, Stats, Throttle, TestBrowser.Profile, Options, () => Handler);
         }
 
         public FakeClock Clock { get; }
@@ -178,12 +178,12 @@ public sealed class LibrusHttpTests
             ? MockHandler.Html("{\"status\":\"error\",\"errors\":[{\"message\":\"zle haslo\"}]}", mediaType: "application/json")
             : MockHandler.Html("{}"));
         var account = new LibrusAccount(AccountKind.Student, new AccountCredentials("u", "p"), TimeSpan.FromMinutes(9), s.Clock, s.Guard,
-            s.Log, s.Stats, s.Throttle, Options, () => handler);
+            s.Log, s.Stats, s.Throttle, TestBrowser.Profile, Options, () => handler);
 
         await Assert.ThrowsAsync<AuthorizationException>(() => account.LoginAsync(CancellationToken.None));
         delays.Clear();
         using var next = new LibrusAccount(AccountKind.Student, new AccountCredentials("u", "p"), TimeSpan.FromMinutes(9), s.Clock, s.Guard,
-            s.Log, s.Stats, s.Throttle, Options, () => handler);
+            s.Log, s.Stats, s.Throttle, TestBrowser.Profile, Options, () => handler);
         await Assert.ThrowsAsync<AuthorizationException>(() => next.LoginAsync(CancellationToken.None));
 
         // Pierwsze żądanie kolejnego logowania znów czeka zwykły odstęp od końca poprzedniego.
@@ -205,7 +205,8 @@ public sealed class LibrusHttpTests
         });
         var cookies = new CookieContainer();
         using var client = new HttpClient(new LibrusHttpHandler(inner, cookies, AccountKind.Parent, log,
-            new DailyStats(clock.Today, clock.Now), guard, new SessionActivity(clock, TimeSpan.FromMinutes(9)), Throttles.None(clock)));
+            new DailyStats(clock.Today, clock.Now), guard, new SessionActivity(clock, TimeSpan.FromMinutes(9)), Throttles.None(clock),
+            TestBrowser.Profile));
 
         (await client.GetAsync("https://school.test/ok")).Dispose();
         using var forbidden = new HttpRequestMessage(HttpMethod.Get, "https://school.test/zakazane");
@@ -222,35 +223,45 @@ public sealed class LibrusHttpTests
     }
 
     [Fact]
-    public async Task RequestsIntroduceThemselvesAsFirefoxUnlessHeaderAlreadySet()
+    public async Task RequestsCarryTheBrowserProfileAndOverrideAnyOtherUserAgent()
     {
         var log = new ListLog();
         var clock = new FakeClock(new DateTime(2026, 11, 12, 10, 0, 0));
         using var guard = new DayGuard(clock, clock.Today, CancellationToken.None);
-        var seen = new List<(string? UserAgent, string? Language)>();
-        var inner = new MockHandler(r => MockHandler.Html("ok"));
-        using var client = new HttpClient(new LibrusHttpHandler(new HeaderSpy(inner, seen), new CookieContainer(), AccountKind.Parent, log,
-            new DailyStats(clock.Today, clock.Now), guard, new SessionActivity(clock, TimeSpan.FromMinutes(9)), Throttles.None(clock)));
+        var inner = new MockHandler(_ => MockHandler.Html("ok"));
+        using var client = new HttpClient(new LibrusHttpHandler(inner, new CookieContainer(), AccountKind.Parent, log,
+            new DailyStats(clock.Today, clock.Now), guard, new SessionActivity(clock, TimeSpan.FromMinutes(9)), Throttles.None(clock),
+            TestBrowser.Profile));
+        // Biblioteka klienta Librusa dodaje własny User-Agent do nagłówków domyślnych, więc handler widzi go już na żądaniu.
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Biblioteka/1.0");
 
         (await client.GetAsync("https://school.test/a")).Dispose();
         using var own = new HttpRequestMessage(HttpMethod.Get, "https://school.test/b");
         own.Headers.UserAgent.ParseAdd("Wlasny/2.0");
         (await client.SendAsync(own)).Dispose();
 
-        Assert.Equal(BrowserIdentity.UserAgent, seen[0].UserAgent);
-        Assert.Equal(BrowserIdentity.AcceptLanguage, seen[0].Language?.Replace(" ", ""));
-        Assert.Equal("Wlasny/2.0", seen[1].UserAgent);
-        Assert.StartsWith("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:", BrowserIdentity.UserAgent);
-        Assert.EndsWith("Firefox/" + BrowserIdentity.FirefoxVersion, BrowserIdentity.UserAgent);
+        foreach (var request in inner.Requests)
+        {
+            Assert.Equal(TestBrowser.Profile.UserAgent, request.UserAgent);
+            Assert.Equal(TestBrowser.Profile.AcceptLanguage, request.Headers["Accept-Language"].Replace(" ", ""));
+            foreach (var (name, value) in TestBrowser.Profile.ClientHints) Assert.Equal(value, request.Headers[name]);
+        }
+        Assert.Equal(2, inner.Requests.Count);
     }
 
-    private sealed class HeaderSpy(HttpMessageHandler inner, List<(string? UserAgent, string? Language)> seen) : DelegatingHandler(inner)
+    [Fact]
+    public async Task EveryRequestOfALoginCarriesTheChosenProfileInsteadOfTheLibraryUserAgent()
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        using var s = new Setup();
+
+        await s.Account.LoginAsync(CancellationToken.None);
+
+        Assert.NotEmpty(s.Handler.Requests);
+        Assert.All(s.Handler.Requests, r =>
         {
-            seen.Add((request.Headers.UserAgent.ToString(), request.Headers.TryGetValues("Accept-Language", out var v) ? string.Join(",", v) : null));
-            return base.SendAsync(request, cancellationToken);
-        }
+            Assert.Equal(TestBrowser.Profile.UserAgent, r.UserAgent);
+            Assert.Equal(TestBrowser.Profile.ClientHints.Count, TestBrowser.Profile.ClientHints.Count(h => r.Headers.TryGetValue(h.Key, out var v) && v == h.Value));
+        });
     }
 
     private static HttpResponseMessage SetCookies(HttpResponseMessage response, params string[] values)
@@ -320,7 +331,7 @@ public sealed class LibrusHttpTests
         using var s = new Setup();
         var activity = new SessionActivity(s.Clock, TimeSpan.FromMinutes(9));
         using var client = new HttpClient(new LibrusHttpHandler(new MockHandler(_ => MockHandler.Html("x", status)),
-            new CookieContainer(), AccountKind.Parent, s.Log, s.Stats, s.Guard, activity, s.Throttle));
+            new CookieContainer(), AccountKind.Parent, s.Log, s.Stats, s.Guard, activity, s.Throttle, TestBrowser.Profile));
 
         activity.LoggedIn();
         s.Clock.Advance(TimeSpan.FromMinutes(5));
@@ -355,7 +366,7 @@ public sealed class LibrusHttpTests
             ? MockHandler.Html("{\"status\":\"error\",\"errors\":[{\"message\":\"Nieprawidłowy login lub hasło\"}]}", mediaType: "application/json")
             : MockHandler.Html("{}"));
         using var account = new LibrusAccount(AccountKind.Student, new AccountCredentials("u", "p"), TimeSpan.FromMinutes(9), s.Clock, s.Guard,
-            s.Log, s.Stats, s.Throttle, Options, () => handler);
+            s.Log, s.Stats, s.Throttle, TestBrowser.Profile, Options, () => handler);
         await Assert.ThrowsAsync<AuthorizationException>(() => account.LoginAsync(CancellationToken.None));
         await Assert.ThrowsAsync<InvalidOperationException>(() => account.FetchListAsync(ModuleKind.Grades, CancellationToken.None));
     }
@@ -388,7 +399,8 @@ public sealed class LibrusHttpTests
             _ => MockHandler.Html("ok")
         });
         using var client = new HttpClient(new LibrusHttpHandler(inner, new CookieContainer(), AccountKind.Student, log,
-            new DailyStats(clock.Today, clock.Now), guard, new SessionActivity(clock, TimeSpan.FromMinutes(9)), Throttles.None(clock)));
+            new DailyStats(clock.Today, clock.Now), guard, new SessionActivity(clock, TimeSpan.FromMinutes(9)), Throttles.None(clock),
+            TestBrowser.Profile));
 
         (await client.PostAsync("https://school.test/a", new FormUrlEncodedContent([new("x", "1")]))).Dispose();
         (await client.PostAsync("https://school.test/c", new FormUrlEncodedContent([new("y", "2")]))).Dispose();

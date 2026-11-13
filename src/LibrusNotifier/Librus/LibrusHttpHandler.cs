@@ -12,6 +12,7 @@ namespace LibrusNotifier.Librus;
 /// Transport HTTP klienta Librusa. Każde żądanie (także kolejne kroki przekierowań) jest zapisywane w logu
 /// (konto, metoda, host i ścieżka bez zapytania, ciasteczek i danych logowania, kod odpowiedzi, czas trwania)
 /// i czeka na minimalny odstęp od poprzedniego żądania (<see cref="RequestThrottle"/>, wspólny dla obu kont).
+/// Każde żądanie dostaje nagłówki wylosowanego profilu przeglądarki (<see cref="BrowserProfile"/>).
 /// Przed i po każdym żądaniu sprawdzana jest zmiana dnia. Przekierowania są obsługiwane tutaj, żeby ciasteczka
 /// z każdego kroku trafiały do kontenera sesji (biblioteka przy własnym handlerze nie obsługuje ich sama).
 /// </summary>
@@ -31,10 +32,11 @@ public sealed partial class LibrusHttpHandler : DelegatingHandler
     private readonly DayGuard _dayGuard;
     private readonly SessionActivity _activity;
     private readonly RequestThrottle _throttle;
+    private readonly BrowserProfile _browser;
     private int _loginSteps = -1; // -1: poza logowaniem; 0: przed pierwszym żądaniem logowania; >0: kolejne kroki
 
     public LibrusHttpHandler(HttpMessageHandler inner, CookieContainer cookies, AccountKind account, IAppLog log, DailyStats stats,
-        DayGuard dayGuard, SessionActivity activity, RequestThrottle throttle) : base(inner)
+        DayGuard dayGuard, SessionActivity activity, RequestThrottle throttle, BrowserProfile browser) : base(inner)
     {
         _cookies = cookies;
         _account = account;
@@ -43,6 +45,7 @@ public sealed partial class LibrusHttpHandler : DelegatingHandler
         _dayGuard = dayGuard;
         _activity = activity;
         _throttle = throttle;
+        _browser = browser;
     }
 
     /// <summary>Transport bez automatycznych ciasteczek i przekierowań (obsługuje je <see cref="LibrusHttpHandler"/>).</summary>
@@ -90,7 +93,7 @@ public sealed partial class LibrusHttpHandler : DelegatingHandler
     private async Task<HttpResponseMessage> SendOnceAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         _dayGuard.Check();
-        BrowserIdentity.Apply(request.Headers);
+        _browser.Apply(request.Headers);
         HttpResponseMessage response;
         var uri = request.RequestUri!;
         var loginStep = _loginSteps > 0;

@@ -12,7 +12,7 @@ namespace LibrusNotifier.Calendar;
 /// Ferie i wakacje z OpenHolidays API z lokalną pamięcią podręczną na dysku, odświeżaną co dobę.
 /// Gdy API jest niedostępne, używany jest istniejący cache; gdy go brak, ferie i wakacje są pomijane.
 /// </summary>
-public sealed class SchoolHolidayProvider(string cacheFile, Clock clock, IAppLog log, HttpMessageHandler? handler = null)
+public sealed class SchoolHolidayProvider(string cacheFile, Clock clock, IAppLog log, BrowserProfile browser, HttpMessageHandler? handler = null)
 {
     public static readonly Uri DefaultBaseUrl = new("https://openholidaysapi.org/");
     public static readonly TimeSpan RefreshInterval = TimeSpan.FromDays(1);
@@ -73,7 +73,7 @@ public sealed class SchoolHolidayProvider(string cacheFile, Clock clock, IAppLog
         using var http = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: false);
         http.Timeout = TimeSpan.FromSeconds(30);
         http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        BrowserIdentity.Apply(http.DefaultRequestHeaders);
+        browser.Apply(http.DefaultRequestHeaders);
         var query = string.Create(CultureInfo.InvariantCulture,
             $"SchoolHolidays?countryIsoCode=PL&subdivisionCode={Uri.EscapeDataString(subdivisionCode)}&languageIsoCode=PL&validFrom={validFrom:yyyy-MM-dd}&validTo={validTo:yyyy-MM-dd}");
         using var response = await http.GetAsync(new Uri(BaseUrl, query), ct);

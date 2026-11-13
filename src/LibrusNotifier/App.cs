@@ -125,6 +125,13 @@ public static class App
             $"administratorzy {config.AdminRecipients.Count} adr., województwo {config.Voivodeship.Name}, " +
             $"limit bezczynności sesji {config.IdleLimit.TotalMinutes:0.##} min.");
 
+        // Profil przeglądarki jest losowany raz na start i obowiązuje oba konta oraz zapytania o ferie do końca działania.
+        var browser = BrowserCatalog.Pick(Random.Shared);
+        log.Info($"Tożsamość przeglądarki (losowana przy starcie): {browser.Describe()}, User-Agent: {browser.UserAgent}.");
+        if (BrowserCatalog.IsStale(day))
+            log.Warn($"Lista wersji przeglądarek (BrowserCatalog) była weryfikowana {BrowserCatalog.VerifiedOn:yyyy-MM-dd}, " +
+                $"czyli ponad {BrowserCatalog.StaleAfterDays} dni temu - trzeba ją odświeżyć (scripts/odswiez-wersje-przegladarek.sh).");
+
         using var shutdown = new CancellationTokenSource();
         ConsoleCancelEventHandler onCancel = (_, e) =>
         {
@@ -148,14 +155,14 @@ public static class App
             await using (var db = NotifierDbContext.Create(paths.DatabaseFile))
                 await db.Database.MigrateAsync(dayGuard.Token);
 
-            var holidays = await new SchoolHolidayProvider(paths.HolidayCacheFile, clock, log).LoadAsync(config.Voivodeship.Code, dayGuard.Token);
+            var holidays = await new SchoolHolidayProvider(paths.HolidayCacheFile, clock, log, browser).LoadAsync(config.Voivodeship.Code, dayGuard.Token);
             var calendar = new SchoolCalendar(holidays);
             dayInfo = calendar.GetDay(day);
             log.Info($"Dzisiaj ({day:yyyy-MM-dd}): {dayInfo.DisplayName}.");
 
             var throttle = new RequestThrottle(clock);
-            using var parent = new LibrusAccount(AccountKind.Parent, config.Parent, config.IdleLimit, clock, dayGuard, log, stats, throttle);
-            using var student = new LibrusAccount(AccountKind.Student, config.Student, config.IdleLimit, clock, dayGuard, log, stats, throttle);
+            using var parent = new LibrusAccount(AccountKind.Parent, config.Parent, config.IdleLimit, clock, dayGuard, log, stats, throttle, browser);
+            using var student = new LibrusAccount(AccountKind.Student, config.Student, config.IdleLimit, clock, dayGuard, log, stats, throttle, browser);
             var dispatcher = new NotificationDispatcher(sender, config.ParentRecipients, config.StudentRecipients, admin, clock, log, stats, calendar);
             var cycle = new NotifierCycle([parent, student], () => NotifierDbContext.Create(paths.DatabaseFile), dispatcher, sender, admin,
                 clock, log, stats, studentNotifications: config.StudentRecipients.Count > 0);

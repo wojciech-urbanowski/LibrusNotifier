@@ -23,11 +23,14 @@ public sealed class LibrusAccount : IAccountGateway
     private readonly Func<HttpMessageHandler> _innerHandlerFactory;
     private readonly SessionActivity _activity;
     private readonly RequestThrottle _throttle;
+    private readonly BrowserProfile _browser;
     private Client? _client;
 
     /// <param name="throttle">Odstęp między żądaniami – ten sam obiekt dla obu kont.</param>
+    /// <param name="browser">Profil przeglądarki wylosowany przy starcie programu – ten sam obiekt dla obu kont.</param>
     public LibrusAccount(AccountKind account, AccountCredentials credentials, TimeSpan idleLimit, Clock clock, DayGuard dayGuard,
-        IAppLog log, DailyStats stats, RequestThrottle throttle, ClientOptions? options = null, Func<HttpMessageHandler>? innerHandlerFactory = null)
+        IAppLog log, DailyStats stats, RequestThrottle throttle, BrowserProfile browser, ClientOptions? options = null,
+        Func<HttpMessageHandler>? innerHandlerFactory = null)
     {
         Account = account;
         _credentials = credentials;
@@ -37,11 +40,19 @@ public sealed class LibrusAccount : IAccountGateway
         _stats = stats;
         // Limit pojedynczego żądania pilnuje LibrusHttpHandler; limit klienta obejmuje też oczekiwanie na odstępy
         // między krokami przekierowań, więc jest tylko zabezpieczeniem przed zawieszeniem.
-        _options = (options ?? new ClientOptions()) with { TimeProvider = new ClockTimeProvider(clock), Timeout = TimeSpan.FromMinutes(5) };
+        // Biblioteka dodaje do każdego żądania własny User-Agent (domyślnie atrapę „Firefox/10.0”), więc podajemy jej wylosowany;
+        // handler i tak ustawia pełny zestaw nagłówków profilu.
+        _options = (options ?? new ClientOptions()) with
+        {
+            TimeProvider = new ClockTimeProvider(clock),
+            Timeout = TimeSpan.FromMinutes(5),
+            UserAgent = browser.UserAgent
+        };
         // Portal Rodzina kieruje rodzica na /rodzic/index, a ucznia na /uczen/index. Konto rodzica nie ma wstępu do widoku
         // ucznia (403 „Brak dostępu”); ścieżki modułów (oceny, ogłoszenia, terminarz itd.) są wspólne dla obu kont.
         _options = _options with { IndexUrl = _options.BaseUrl + PanelPath(account) };
         _throttle = throttle;
+        _browser = browser;
         _innerHandlerFactory = innerHandlerFactory ?? LibrusHttpHandler.CreateDefaultInner;
         _activity = new SessionActivity(clock, idleLimit);
     }
@@ -59,7 +70,7 @@ public sealed class LibrusAccount : IAccountGateway
     {
         Reset();
         var cookies = new CookieContainer();
-        var handler = new LibrusHttpHandler(_innerHandlerFactory(), cookies, Account, _log, _stats, _dayGuard, _activity, _throttle);
+        var handler = new LibrusHttpHandler(_innerHandlerFactory(), cookies, Account, _log, _stats, _dayGuard, _activity, _throttle, _browser);
         _client = new Client(token: null, options: _options, handler: handler, cookies: cookies);
         // Samo logowanie (handshake OAuth) ma krótszy odstęp między żądaniami; odczyt panelu po nim – zwykły.
         handler.BeginLogin();

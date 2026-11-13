@@ -199,24 +199,16 @@ public sealed class GradeTableTests
     [Fact]
     public void NoGradesGiveAnEmptyTableAndSummerGivesNone()
     {
-        var empty = Build([]);
-        Assert.Empty(empty.Rows);
-        Assert.Equal(0, empty.Columns);
+        Assert.Empty(Build([]).Rows);
 
         Assert.Null(GradeTable.Build([Grade("Matematyka", "5", "2027-06-01", "2")], BothFetched, RecipientGroup.Parents, new DateOnly(2027, 7, 1)));
         Assert.Null(GradeTable.Build([], BothFetched, RecipientGroup.Parents, new DateOnly(2027, 8, 31)));
     }
 
     [Fact]
-    public void ColumnsAreTheLongestRowAndSchoolYearHasShortName()
+    public void SchoolYearHasShortName()
     {
-        var table = Build([
-            Grade("Matematyka", "5", "2026-10-01"), Grade("Matematyka", "4", "2026-10-02"), Grade("Matematyka", "3", "2026-10-03"),
-            Grade("Fizyka", "2", "2026-10-04")
-        ]);
-
-        Assert.Equal(3, table.Columns);
-        Assert.Equal("2026/27", table.SchoolYearName);
+        Assert.Equal("2026/27", Build([Grade("Matematyka", "5", "2026-10-01")]).SchoolYearName);
         Assert.Equal("2099/00", new GradeTable(1, 2099, []).SchoolYearName);
     }
 
@@ -244,17 +236,18 @@ public sealed class DigestGradeTableMailTests
 
     private static OutgoingMail Mail(GradeTable? grades, DateTime? dataAsOf = null)
     {
-        var clock = new FakeClock(new DateTime(2026, 11, 12, 6, 30, 0));
+        // Lista ocen jest tylko w zestawieniu popołudniowym (w porannym wywołujący przekazuje null).
+        var clock = new FakeClock(new DateTime(2026, 11, 12, 15, 0, 0));
         var events = new[]
         {
-            new DigestEvent(new DateOnly(2026, 11, 12), EventCategory.Test, "Sprawdzian", 2, "", "Fizyka", "", "", EventSource.Schedule),
-            new DigestEvent(new DateOnly(2026, 11, 13), EventCategory.Quiz, "Kartkówka", 3, "", "Chemia", "", "", EventSource.Schedule)
+            new DigestEvent(new DateOnly(2026, 11, 13), EventCategory.Quiz, "Kartkówka", 3, "", "Chemia", "", "", EventSource.Schedule),
+            new DigestEvent(new DateOnly(2026, 11, 16), EventCategory.Test, "Sprawdzian", 2, "", "Fizyka", "", "", EventSource.Schedule)
         };
-        return DigestMailTemplates.Build(DigestBuilder.Build(DigestKind.Morning, events, clock, Calendar), ["rodzic@example.com"], clock, Calendar, dataAsOf, grades);
+        return DigestMailTemplates.Build(DigestBuilder.Build(DigestKind.Afternoon, events, clock, Calendar), ["rodzic@example.com"], clock, Calendar, dataAsOf, grades);
     }
 
     [Fact]
-    public void TableIsTheLastSectionAfterEventsAndLegendAndBeforeTheFooter()
+    public void GradeListIsTheLastSectionAfterEventsAndLegendAndBeforeTheFooter()
     {
         var html = Mail(Table(("Matematyka", ["5", "4+"])), new DateTime(2026, 11, 12, 6, 0, 0)).HtmlBody!;
 
@@ -263,13 +256,13 @@ public sealed class DigestGradeTableMailTests
         var grades = html.IndexOf("Oceny z bieżącego semestru", StringComparison.Ordinal);
         var footer = html.IndexOf("Stan danych z Librusa", StringComparison.Ordinal);
         Assert.True(upcoming > 0 && upcoming < legend, "legenda kolorów wydarzeń jest pod listami wydarzeń");
-        Assert.True(legend < grades, "tabela ocen jest za legendą wydarzeń");
-        Assert.True(grades < footer, "tabela ocen jest przed stopką");
+        Assert.True(legend < grades, "lista ocen jest za legendą wydarzeń");
+        Assert.True(grades < footer, "lista ocen jest przed stopką");
         Assert.Contains("Semestr 1, rok szkolny 2026/27; oceny od najstarszej do najnowszej.", html);
     }
 
     [Fact]
-    public void EachMarkIsItsOwnCellColoredLikeInTheNewGradeMail()
+    public void EachMarkIsItsOwnChipColoredLikeInTheNewGradeMail()
     {
         var html = Mail(Table(("Matematyka", ["6", "5", "+", "4", "3", "2", "-", "1", "np"]))).HtmlBody!;
 
@@ -278,7 +271,7 @@ public sealed class DigestGradeTableMailTests
                      ("6", "#57cf7f"), ("5", "#8fe0a1"), ("+", "#8fdcc9"), ("4", "#cdeccf"), ("3", "#fff0a8"), ("2", "#ffc78a"), ("-", "#f9a986"),
                      ("1", "#f28b82"), ("np", "#e2e2e2")
                  })
-            Assert.Contains($"background:{background};color:#1f1f1f;font-weight:600;\">{mark}</td>", html);
+            Assert.Contains($"background:{background};color:#1f1f1f;font-weight:600;\">{mark}</span>", html);
     }
 
     [Fact]
@@ -286,22 +279,40 @@ public sealed class DigestGradeTableMailTests
     {
         var html = Mail(Table(("Matematyka", ["4+", "3-"]))).HtmlBody!;
 
-        Assert.Contains("background:#cdeccf;color:#1f1f1f;font-weight:600;\">4+</td>", html);
-        Assert.Contains("background:#fff0a8;color:#1f1f1f;font-weight:600;\">3-</td>", html);
+        Assert.Contains("background:#cdeccf;color:#1f1f1f;font-weight:600;\">4+</span>", html);
+        Assert.Contains("background:#fff0a8;color:#1f1f1f;font-weight:600;\">3-</span>", html);
     }
 
     [Fact]
-    public void HeaderSpansTheLongestRowAndShorterRowsJustEnd()
+    public void EachSubjectIsOneListRowWithNameFirstAndItsMarksInOrder()
     {
         var html = Mail(Table(("Fizyka", ["2"]), ("Matematyka", ["5", "4", "3", "2"]))).HtmlBody!;
+        html = html[html.IndexOf("Oceny z bieżącego semestru", StringComparison.Ordinal)..];
 
-        Assert.Contains("colspan=\"4\"", html);
-        Assert.Contains("scope=\"row\"", html);
-        var fizyka = html.IndexOf(">Fizyka</th>", StringComparison.Ordinal);
-        var matematyka = html.IndexOf(">Matematyka</th>", StringComparison.Ordinal);
+        Assert.Equal(1, html.Split("role=\"list\"").Length - 1);
+        Assert.Equal(2, html.Split("role=\"listitem\"").Length - 1);
+        var fizyka = html.IndexOf(">Fizyka</strong>", StringComparison.Ordinal);
+        var matematyka = html.IndexOf(">Matematyka</strong>", StringComparison.Ordinal);
         Assert.True(fizyka > 0 && fizyka < matematyka, "wiersze w kolejności z tabeli");
         var fizykaRow = html[fizyka..matematyka];
-        Assert.Equal(1, fizykaRow.Split("<td ").Length - 1); // jedna komórka z oceną, bez dopełniaczy
+        Assert.Equal(1, fizykaRow.Split("<span ").Length - 1); // jedno pole z oceną, bez dopełniaczy
+        var matematykaRow = html[matematyka..html.IndexOf("</div>", matematyka, StringComparison.Ordinal)];
+        Assert.Equal(["5", "4", "3", "2"], System.Text.RegularExpressions.Regex.Matches(matematykaRow, @">([^<]+)</span>").Select(m => m.Groups[1].Value));
+    }
+
+    [Fact]
+    public void GradeListHasNoTableSoItCannotBeWiderThanThePhoneScreen()
+    {
+        // Wcześniej tabela miała kolumnę na każdą ocenę (kilkaset pikseli przy wielu ocenach); teraz oceny zawijają się do kolejnych linii.
+        var marks = Enumerable.Range(0, 30).Select(i => i % 2 == 0 ? "5" : "+").ToArray();
+        var html = Mail(Table(("Matematyka", marks))).HtmlBody!;
+        var grades = html[html.IndexOf("Oceny z bieżącego semestru", StringComparison.Ordinal)..];
+
+        Assert.DoesNotContain("<table", grades);
+        Assert.DoesNotContain("<td", grades);
+        Assert.Equal(30, grades.Split("display:inline-block;").Length - 1);
+        Assert.DoesNotMatch(@"role=""listitem""[^>]*white-space:nowrap", grades); // niepodzielne są pola z ocenami, nie cały wiersz
+        Assert.Equal(30, grades.Split("white-space:nowrap;").Length - 1);
     }
 
     [Fact]
@@ -336,8 +347,8 @@ public sealed class DigestGradeTableMailTests
 
         Assert.Contains("Brak ocen w bieżącym semestrze.", mail.HtmlBody);
         Assert.Contains("Brak ocen w bieżącym semestrze.", mail.Body);
-        Assert.DoesNotContain("scope=\"row\"", mail.HtmlBody);
-        Assert.DoesNotContain("colspan", mail.HtmlBody);
+        Assert.DoesNotContain("role=\"list\"", mail.HtmlBody);
+        Assert.DoesNotContain("role=\"listitem\"", mail.HtmlBody);
     }
 
     [Fact]

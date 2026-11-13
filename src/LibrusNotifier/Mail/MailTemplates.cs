@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using LibrusNotifier.Calendar;
 using LibrusNotifier.Data;
@@ -8,8 +7,11 @@ using LibrusNotifier.Timing;
 
 namespace LibrusNotifier.Mail;
 
-/// <summary>Treść maili o nowych elementach: osobny mail na element, temat opisuje element.</summary>
-public static class MailTemplates
+/// <summary>
+/// Treść maili o nowych elementach: osobny mail na element, temat opisuje element. Ten plik to temat i wersja tekstowa;
+/// układ HTML jest w <c>MailTemplates.Html.cs</c>.
+/// </summary>
+public static partial class MailTemplates
 {
     public const string SubjectPrefix = "[Librus] ";
     private const int MaxSubjectLength = 160;
@@ -45,7 +47,7 @@ public static class MailTemplates
         var dates = new DateAnnotator(clock, calendar);
         string F(string label) => elementFields.FirstOrDefault(f => f.Label == label)?.Value ?? "";
         if (kind == NotificationKind.Moved && related is null) kind = NotificationKind.New;
-        var fields = LeadFields(element, kind, related).Concat(elementFields).ToList();
+        var lead = LeadFields(element, kind, related).ToList();
 
         var subject = SubjectPrefix + Join(kind switch
         {
@@ -56,7 +58,7 @@ public static class MailTemplates
         var report = element.Type == ElementTypes.Grade && kind == NotificationKind.New && subjectGrades is not null
             ? GradeReport.Build(element, subjectGrades)
             : null;
-        return Build(element, to, dates, clock, fields, details, subject, kind, detectedUtc, report);
+        return Build(element, to, dates, clock, lead, elementFields, details, subject, kind, detectedUtc, report);
     }
 
     private static IEnumerable<string> NewParts(ElementEntity element, Func<string, string> F) =>
@@ -75,9 +77,12 @@ public static class MailTemplates
             _ => ["Nowy element: ", element.Type]
         };
 
-    private static OutgoingMail Build(ElementEntity element, IReadOnlyList<string> to, DateAnnotator dates, Clock clock, IReadOnlyList<Field> fields,
-        IReadOnlyList<Field> details, string subject, NotificationKind kind, DateTime? detectedUtc, GradeReport? report)
+    /// <param name="lead">Pola na początku maila o zmianie terminu lub usunięciu (<see cref="LeadFields"/>).</param>
+    /// <param name="elementFields">Pola samego elementu.</param>
+    private static OutgoingMail Build(ElementEntity element, IReadOnlyList<string> to, DateAnnotator dates, Clock clock, IReadOnlyList<Field> lead,
+        IReadOnlyList<Field> elementFields, IReadOnlyList<Field> details, string subject, NotificationKind kind, DateTime? detectedUtc, GradeReport? report)
     {
+        var fields = lead.Concat(elementFields).ToList();
         var extra = details.Where(d => !fields.Any(f => f.Label == d.Label && f.Value == d.Value)).ToList();
         var note = extra.Count == 0 && element.Type is ElementTypes.Message && element.DetailsJson is null
             ? "(Treść niedostępna - sprawdź w Librusie)"
@@ -109,7 +114,7 @@ public static class MailTemplates
         // Opisy dat wchodzą do tematu przed ewentualnym skróceniem, które dotyka tekstu przed datą, a nie opisu.
         var subjectLine = CleanSubject(dates.PlainFitting(NormalizeSubject(subject), MaxSubjectLength));
         return new OutgoingMail(to, subjectLine, body.ToString(),
-            BuildHtml(subjectLine, typeName, fields, extra, note, visibility, detected, dates, MarkStyleFor(element.Type), report, element.Type));
+            BuildHtml(subjectLine, typeName, lead, elementFields, extra, note, visibility, detected, dates, MarkStyleFor(element.Type), report, element.Type));
     }
 
     /// <summary>Pola na początku maila o zmianie terminu lub usunięciu (przed polami samego elementu).</summary>
@@ -190,111 +195,6 @@ public static class MailTemplates
 
     private static string NormalizeSubject(string subject) => ElementKeys.Normalize(subject.Replace('\r', ' ').Replace('\n', ' '));
 
-    // Style są wpisane w elementy (klienci poczty różnie traktują <style>). Bez kolorów tła i tekstu treści, żeby
-    // czytało się to w jasnym i ciemnym motywie; tło etykiet jest półprzezroczyste, ramki w średnim szarym.
-    private const string PageStyle = "margin:0;padding:16px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.45;";
-    private const string HeadingStyle = "margin:0 0 12px;font-size:18px;font-weight:600;";
-    private const string TableStyle = "border-collapse:collapse;width:100%;max-width:640px;margin:0 0 12px;";
-    private const string LabelCellStyle = "border:1px solid #999999;padding:6px 10px;width:160px;text-align:left;vertical-align:top;font-weight:600;background:rgba(128,128,128,0.15);";
-    private const string ValueCellStyle = "border:1px solid #999999;padding:6px 10px;text-align:left;vertical-align:top;word-break:break-word;";
-    // Ten sam średni szary co w stopce (#777777): czytelny w jasnym i ciemnym motywie.
-    private const string TechnicalColorStyle = "color:#777777;";
-    private const string MetaTableStyle = "border-collapse:collapse;margin:12px 0 0;font-size:12px;color:#777777;";
-    private const string MetaCellStyle = "padding:2px 12px 2px 0;text-align:left;vertical-align:top;";
-
-    /// <summary>
-    /// Wersja HTML maila: pola jako prawdziwe tabele (etykieta w <c>&lt;th scope="row"&gt;</c>, wartość w <c>&lt;td&gt;</c>),
-    /// szczegóły (np. treść wiadomości) w osobnej tabeli. Wszystkie wartości są kodowane, nic z Librusa nie trafia do HTML-a jako znacznik;
-    /// jedyne znaczniki, jakie dodajemy w wartościach, to <c>&lt;strong&gt;</c> wokół dat „na teraz” (dziś, jutro, pierwszy dzień po wolnym);
-    /// dat technicznych (<see cref="DateModeFor"/>) to nie dotyczy.
-    /// </summary>
-    private static string BuildHtml(string title, string typeName, IReadOnlyList<Field> fields, IReadOnlyList<Field> extra, string? note,
-        string visibility, string detected, DateAnnotator dates, Func<string, string>? markStyle, GradeReport? report, string type)
-    {
-        var html = new StringBuilder();
-        html.AppendLine("<!DOCTYPE html>")
-            .AppendLine("<html lang=\"pl\">")
-            .AppendLine("<head>")
-            .AppendLine("<meta charset=\"utf-8\">")
-            .AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
-            .AppendLine("<meta name=\"color-scheme\" content=\"light dark\">")
-            .AppendLine("<meta name=\"supported-color-schemes\" content=\"light dark\">")
-            .AppendLine($"<title>{Encode(title)}</title>")
-            .AppendLine("</head>")
-            .AppendLine($"<body style=\"{PageStyle}\">")
-            .AppendLine($"<h1 style=\"{HeadingStyle}\">{Encode(typeName)}</h1>");
-        AppendFieldTable(html, fields, dates, type, markStyle);
-        AppendFieldTable(html, extra, dates, type);
-        if (note is not null) html.AppendLine($"<p><em>{Encode(note)}</em></p>");
-        if (report is not null) AppendReportHtml(html, report);
-        html.AppendLine($"<table style=\"{MetaTableStyle}\">")
-            .AppendLine("<tbody>")
-            .AppendLine($"<tr><th scope=\"row\" style=\"{MetaCellStyle}font-weight:normal;\">Widoczne na koncie</th><td style=\"{MetaCellStyle}\">{Encode(visibility)}</td></tr>")
-            .AppendLine($"<tr><th scope=\"row\" style=\"{MetaCellStyle}font-weight:normal;\">Wykryto</th><td style=\"{MetaCellStyle}\">{Encode(detected)}</td></tr>")
-            .AppendLine("</tbody>")
-            .AppendLine("</table>")
-            .AppendLine($"<p style=\"margin:12px 0 0;font-size:12px;color:#777777;\">{Encode(FooterText)}</p>")
-            .AppendLine("</body>")
-            .AppendLine("</html>");
-        return html.ToString();
-    }
-
-    /// <summary>Styl pola „Ocena” w mailu o ocenie: kolor wg skali (ocena) albo szary (ocena opisowa); inne typy nie mają koloru.</summary>
-    private static Func<string, string>? MarkStyleFor(string type) => type switch
-    {
-        ElementTypes.Grade => mark => GradePalette.CellStyle(mark),
-        ElementTypes.DescriptiveGrade => mark => GradePalette.CellStyle(mark, descriptive: true),
-        _ => null
-    };
-
-    private static void AppendFieldTable(StringBuilder html, IReadOnlyList<Field> fields, DateAnnotator dates, string type, Func<string, string>? markStyle = null)
-    {
-        if (fields.Count == 0) return;
-        html.AppendLine($"<table style=\"{TableStyle}\">").AppendLine("<tbody>");
-        foreach (var field in fields)
-        {
-            // Data techniczna (kiedy wpis dodano) jest szara i bez opisu, żeby nie mylić jej z datą, której dotyczy powiadomienie.
-            var technical = TechnicalDateLabels.Contains(field.Label);
-            var value = technical ? EncodeMultiline(field.Value) : dates.Html(field.Value, DateModeFor(type, field.Label));
-            // Szara jest też waga: cyfra obok oceny łatwo się z nią myli. Etykieta i wartość są szare jak „Data dodania”.
-            var muted = technical || field.Label == WeightLabel;
-            var color = muted ? TechnicalColorStyle : markStyle is not null && field.Label == GradeLabel ? markStyle(field.Value) : "";
-            html.AppendLine($"<tr><th scope=\"row\" style=\"{LabelCellStyle}{(muted ? color : "")}\">{Encode(field.Label)}</th><td style=\"{ValueCellStyle}{color}\">{value}</td></tr>");
-        }
-        html.AppendLine("</tbody>").AppendLine("</table>");
-    }
-
-    private const string GradeLabel = "Ocena";
-    private const string WeightLabel = "Waga";
-    private const string ReportHeadingStyle = "margin:20px 0 8px;font-size:15px;font-weight:600;";
-    private const string ReportHeadCellStyle = "border:1px solid #999999;padding:4px 10px;text-align:left;vertical-align:top;font-size:12px;font-weight:600;background:rgba(128,128,128,0.15);";
-
-    /// <summary>Raport ocen z przedmiotu pod treścią: najnowsza na górze, ocena, której dotyczy mail, jest pogrubiona i oznaczona jako nowa.</summary>
-    private static void AppendReportHtml(StringBuilder html, GradeReport report)
-    {
-        html.AppendLine($"<h2 style=\"{ReportHeadingStyle}\">{Encode(ReportTitle(report))}</h2>")
-            .AppendLine($"<table style=\"{TableStyle}\">")
-            .AppendLine("<thead>")
-            .AppendLine("<tr>" + string.Concat(new[] { "Data", "Ocena", "Kategoria", WeightLabel }
-                .Select(h => $"<th scope=\"col\" style=\"{ReportHeadCellStyle}{(h == WeightLabel ? TechnicalColorStyle : "")}\">{h}</th>")) + "</tr>")
-            .AppendLine("</thead>")
-            .AppendLine("<tbody>");
-        foreach (var row in report.Rows)
-        {
-            var weight = row.Counts ? row.Weight : (row.Weight.Length == 0 ? "" : row.Weight + " ") + "(poza średnią)";
-            var bold = row.IsCurrent ? "font-weight:700;" : "";
-            var date = Encode(row.Date) + (row.IsCurrent ? " (nowa)" : "");
-            // Ocena ma ten sam kolor co w treści maila (oznaczenia spoza skali, np. „np”, są szare); puste pole jest tylko pogrubione,
-            // gdy to ocena z powiadomienia.
-            var markStyle = ValueCellStyle + (GradePalette.CellStyle(row.Mark) is { Length: > 0 } colored ? colored : bold);
-            html.AppendLine($"<tr><td style=\"{ValueCellStyle}white-space:nowrap;{bold}\">{date}</td>" +
-                            $"<td style=\"{markStyle}\">{Encode(row.Mark)}</td>" +
-                            $"<td style=\"{ValueCellStyle}{bold}\">{Encode(row.Category)}</td>" +
-                            $"<td style=\"{ValueCellStyle}{TechnicalColorStyle}\">{Encode(weight)}</td></tr>"); // waga szara i niepogrubiona
-        }
-        html.AppendLine("</tbody>").AppendLine("</table>");
-    }
-
     private static void AppendReportText(StringBuilder body, GradeReport report)
     {
         body.AppendLine().AppendLine(ReportTitle(report) + ":");
@@ -312,11 +212,6 @@ public static class MailTemplates
 
     private static string ReportTitle(GradeReport report) =>
         $"Oceny z przedmiotu {report.Subject}{(report.Semester is { } semester ? $", semestr {semester}" : "")} (od najnowszej)";
-
-    private static string Encode(string text) => WebUtility.HtmlEncode(text);
-
-    private static string EncodeMultiline(string text) =>
-        Encode(text.Replace("\r\n", "\n").Replace('\r', '\n')).Replace("\n", "<br>\n");
 
     private static void AppendField(StringBuilder body, Field field, DateAnnotator dates, string type)
     {
