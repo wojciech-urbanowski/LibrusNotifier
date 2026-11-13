@@ -3,16 +3,26 @@
 # i uruchamia aplikację z powrotem w tle. Konfiguracja (librus_config.txt) i dane (data/) nie są ruszane.
 #
 # Użycie:
-#   aktualizuj-rpi.sh                  najnowsze wydanie z GitHuba
-#   aktualizuj-rpi.sh 0.3.0            wskazana wersja z GitHuba (także v0.3.0)
-#   aktualizuj-rpi.sh plik.tar.gz      archiwum z dysku (np. skopiowane przez scp)
+#   aktualizuj-rpi.sh [--katalog KATALOG] [WERSJA | ARCHIWUM]
 #
-# Zmienne środowiskowe:
-#   LIBRUS_DIR   katalog aplikacji (domyślnie /mnt/ssd512gb/LibrusNotifierNET/LibrusNotifier)
+#   (bez argumentu)    najnowsze wydanie z GitHuba
+#   0.3.0              wskazana wersja z GitHuba (także v0.3.0)
+#   plik.tar.gz        archiwum z dysku (np. skopiowane przez scp)
+#   -k, --katalog      katalog aplikacji (ten z plikiem LibrusNotifier.dll i librus_config.txt)
+#   -h, --help         ten opis
+#
+# Katalog aplikacji skrypt ustala w tej kolejności:
+#   1. opcja --katalog
+#   2. zmienna środowiskowa LIBRUS_DIR
+#   3. katalog ze skryptem, jeśli jest w nim zainstalowana aplikacja (LibrusNotifier.dll)
+#   4. bieżący katalog, jeśli jest w nim zainstalowana aplikacja
+# Przy pierwszej instalacji (pusty katalog) trzeba podać katalog jawnie (1 lub 2).
+#
+# Kopie poprzednich plików programu trafiają do katalogu LibrusNotifier-poprzednie obok katalogu aplikacji
+# (inny katalog wskazuje zmienna LIBRUS_BACKUP_DIR). Katalog nadrzędny aplikacji musi być zapisywalny.
 
 set -euo pipefail
 
-APP_DIR="${LIBRUS_DIR:-/mnt/ssd512gb/LibrusNotifierNET/LibrusNotifier}"
 REPO="wojciech-urbanowski/LibrusNotifier"
 STOP_TIMEOUT=180      # sekundy na łagodne zamknięcie (SIGTERM) przed SIGKILL
 KEEP_BACKUPS=3        # tyle ostatnich kopii poprzednich plików programu zostaje
@@ -22,10 +32,45 @@ info() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*"; }
 warn() { printf '[%s] UWAGA: %s\n' "$(date '+%H:%M:%S')" "$*" >&2; }
 die()  { printf '[%s] BŁĄD: %s\n' "$(date '+%H:%M:%S')" "$*" >&2; exit 1; }
 
+# Wypisuje blok komentarza z początku pliku (od drugiej linii do pierwszej pustej) bez znaków '#'.
+usage() { sed -n '2,/^$/{/^$/d;s/^# \{0,1\}//;p;}' "${BASH_SOURCE[0]}"; }
+
+# ---------- Argumenty i katalog aplikacji ----------
+
+APP_DIR="${LIBRUS_DIR:-}"
+SOURCE=""
+while (($# > 0)); do
+    case "$1" in
+        -h | --help) usage; exit 0 ;;
+        -k | --katalog)
+            (($# >= 2)) || die "Opcja $1 wymaga podania katalogu."
+            APP_DIR="$2"
+            shift 2 ;;
+        --katalog=*) APP_DIR="${1#*=}"; shift ;;
+        -*) die "Nieznana opcja: $1 (opis: --help)." ;;
+        *)
+            [[ -z "$SOURCE" ]] || die "Za dużo argumentów: $1 (opis: --help)."
+            SOURCE="$1"
+            shift ;;
+    esac
+done
+
+if [[ -z "$APP_DIR" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+    for candidate in "$SCRIPT_DIR" "$PWD"; do
+        if [[ -f "$candidate/LibrusNotifier.dll" ]]; then
+            APP_DIR="$candidate"
+            break
+        fi
+    done
+    [[ -n "$APP_DIR" ]] || die "Nie wiem, gdzie jest aplikacja. Podaj katalog: --katalog KATALOG albo zmienna LIBRUS_DIR (opis: --help)."
+fi
+
 [[ -d "$APP_DIR" ]] || die "Brak katalogu aplikacji: $APP_DIR"
 APP_DIR="$(readlink -f "$APP_DIR")"
 PARENT_DIR="$(dirname "$APP_DIR")"
-BACKUP_DIR="$PARENT_DIR/LibrusNotifier-poprzednie"
+BACKUP_DIR="${LIBRUS_BACKUP_DIR:-$PARENT_DIR/LibrusNotifier-poprzednie}"
+info "Katalog aplikacji: $APP_DIR"
 [[ -f "$APP_DIR/librus_config.txt" ]] || warn "W $APP_DIR nie ma librus_config.txt - aplikacja nie wystartuje bez konfiguracji."
 
 if command -v dotnet > /dev/null 2>&1; then
@@ -41,7 +86,6 @@ WORK_DIR="$(mktemp -d "$PARENT_DIR/.aktualizacja.XXXXXX")"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 ARCHIVE=""
-SOURCE="${1:-}"
 if [[ -n "$SOURCE" && -f "$SOURCE" ]]; then
     ARCHIVE="$(readlink -f "$SOURCE")"
     info "Używam archiwum z dysku: $ARCHIVE"
@@ -54,6 +98,7 @@ else
             || true
         [[ -n "$URL" ]] || die "Nie udało się ustalić adresu najnowszego wydania (GitHub API)."
     else
+        [[ "$SOURCE" =~ ^v?[0-9]+(\.[0-9A-Za-z-]+)*$ ]] || die "Argument '$SOURCE' nie jest ani plikiem, ani numerem wersji (np. 0.3.0)."
         VERSION="${SOURCE#v}"
         URL="https://github.com/$REPO/releases/download/v$VERSION/LibrusNotifier-$VERSION-linux-arm64.tar.gz"
     fi

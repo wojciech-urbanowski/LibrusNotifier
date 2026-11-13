@@ -40,6 +40,19 @@ Uruchamianie codziennie tuż po północy (`crontab -e`):
 Proces działa do końca dnia według wbudowanego harmonogramu i sam się kończy (po ostatnim oknie lub o północy).
 Druga instancja wykrywa blokadę `librus_notifier.lock` i od razu kończy działanie.
 
+#### Aktualizacja
+
+[scripts/aktualizuj-rpi.sh](scripts/aktualizuj-rpi.sh) zamyka działającą instancję, robi kopię plików programu, podmienia
+je na wersję z wydania na GitHubie (albo z archiwum `.tar.gz` skopiowanego na Pi) i uruchamia aplikację w tle.
+Konfiguracja i `data/` zostają nietknięte. Katalog aplikacji podaje się opcją `--katalog` albo zmienną `LIBRUS_DIR`
+(gdy skrypt leży w katalogu aplikacji albo jest uruchamiany z niego, wykrywa go sam). Pełny opis: `--help`.
+
+```sh
+./aktualizuj-rpi.sh --katalog /opt/librus-notifier             # najnowsze wydanie
+./aktualizuj-rpi.sh --katalog /opt/librus-notifier 0.3.0       # wskazana wersja
+LIBRUS_DIR=/opt/librus-notifier ./aktualizuj-rpi.sh plik.tar.gz
+```
+
 ### Windows (Harmonogram zadań)
 
 ```powershell
