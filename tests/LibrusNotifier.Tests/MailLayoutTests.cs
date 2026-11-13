@@ -8,7 +8,7 @@ using LibrusNotifier.Processing;
 namespace LibrusNotifier.Tests;
 
 /// <summary>
-/// Układ HTML maili o elementach (czytany głównie na telefonie): zmiana w planie, wpis w terminarzu i wiadomość to karty,
+/// Układ HTML maili o elementach (czytany głównie na telefonie): zmiana w planie, wpis w terminarzu, wiadomość i ogłoszenie to karty,
 /// reszta to linie „etykieta: wartość”; nigdzie nie ma kolumn o stałej szerokości.
 /// </summary>
 public sealed class MailLayoutTests
@@ -229,10 +229,10 @@ public sealed class MailLayoutTests
     [Fact]
     public void LinkInOtherTypeAndInCardLineIsClickableToo()
     {
-        var announcement = Html(Mail(ElementTypes.Announcement, [new("Tytuł", "Apel"), new("Treść", "Szczegóły: www.szkola.pl/apel")]));
+        var homework = Html(Mail(ElementTypes.Homework, [new("Przedmiot", "Historia"), new("Temat", "Zobacz: www.szkola.pl/apel")]));
         var scheduleEntry = Html(Mail(ElementTypes.ScheduleEvent, [new("Data", "2026-11-13"), new("Tytuł", "Wycieczka"), new("Opis", "Trasa: https://mapa.pl/trasa")]));
 
-        Assert.Contains("<a href=\"https://www.szkola.pl/apel\">www.szkola.pl/apel</a>", announcement);
+        Assert.Contains("Temat:</span> Zobacz: <a href=\"https://www.szkola.pl/apel\">www.szkola.pl/apel</a></div>", homework);
         Assert.Contains("Opis:</span> Trasa: <a href=\"https://mapa.pl/trasa\">https://mapa.pl/trasa</a></div>", scheduleEntry);
     }
 
@@ -254,16 +254,75 @@ public sealed class MailLayoutTests
     public void RepeatedNameInParenthesesIsDropped(string sender, string expected) =>
         Assert.Equal(expected, MailTemplates.WithoutRepeatedName(sender));
 
+    // ---------- ogłoszenie (układ jak wiadomości) ----------
+
+    private const string AnnouncementBody = "Szanowni Państwo,\n\nzapraszamy do udziału:\n- w poniedziałek\n- we wtorek\n\n\nDyrekcja";
+
+    [Fact]
+    public void AnnouncementCardHasTitleAuthorAndDateAndTheBodyIsBelowItInParagraphs()
+    {
+        var html = Html(Mail(ElementTypes.Announcement,
+            [new("Tytuł", "Tydzień Tolerancji i Życzliwości"), new("Autor", "Kowalska Anna (Kowalska Anna)"), new("Data", "2026-11-13"), new("Treść", AnnouncementBody)]));
+
+        Assert.Single(Regex.Matches(html, "<table "));
+        Assert.Contains("border-left:6px solid #bcd9f5;", html);
+        Assert.Contains("font-weight:700;line-height:1.3;\">Tydzień Tolerancji i Życzliwości</div>", html);
+        Assert.Contains("od <strong>Kowalska Anna</strong>", html);
+        Assert.Contains("color:#777777;\">2026-11-13 (piątek)</div>", html); // data dodania: sam dzień tygodnia, bez „jutro” i bez pogrubienia
+
+        // Treść jest pod kartą, bez etykiety, w trzech akapitach, pojedyncze nowe linie jako <br>; w karcie nie ma jej drugi raz.
+        Assert.True(html.IndexOf("Szanowni Państwo", StringComparison.Ordinal) > html.IndexOf("</table>", StringComparison.Ordinal));
+        Assert.DoesNotContain("Treść", html);
+        Assert.DoesNotContain("Autor:", html);
+        Assert.Equal(3, Regex.Matches(html, "<p style=\"margin:").Count);
+        Assert.Contains("zapraszamy do udziału:<br>\n- w poniedziałek<br>\n- we wtorek</p>", html);
+        Assert.Matches(@"overflow-wrap:anywhere;word-break:break-word;""[^>]*>\s*<p", html);
+    }
+
+    [Fact]
+    public void AnnouncementLooksTheSameAsAMessageWithTheSameContent()
+    {
+        static string Content(string html) // wszystko między nagłówkiem a stopką
+        {
+            var start = html.IndexOf("</h1>", StringComparison.Ordinal);
+            return html[start..html.IndexOf("margin:14px 0 0;", StringComparison.Ordinal)];
+        }
+
+        var message = Html(Mail(ElementTypes.Message,
+            [new("Nadawca", "Kowalska Anna"), new("Temat", "Konkurs"), new("Data", "2026-11-13 10:22:34")], [new("Treść", AnnouncementBody)]));
+        var announcement = Html(Mail(ElementTypes.Announcement,
+            [new("Tytuł", "Konkurs"), new("Autor", "Kowalska Anna"), new("Data", "2026-11-13 10:22:34"), new("Treść", AnnouncementBody)]));
+
+        Assert.Equal(Content(message), Content(announcement));
+    }
+
+    [Fact]
+    public void AnnouncementWithoutBodyIsJustTheCard()
+    {
+        var html = Html(Mail(ElementTypes.Announcement, [new("Tytuł", "Apel"), new("Autor", "Dyrekcja")]));
+
+        Assert.Single(Regex.Matches(html, "<table "));
+        Assert.DoesNotContain("<p style=", html);
+    }
+
+    [Fact]
+    public void LinkInAnnouncementBodyIsClickable()
+    {
+        var html = Html(Mail(ElementTypes.Announcement, [new("Tytuł", "Apel"), new("Treść", "Zobacz: www.szkola.pl/apel")]));
+
+        Assert.Contains("Zobacz: <a href=\"https://www.szkola.pl/apel\">www.szkola.pl/apel</a></p>", html);
+    }
+
     // ---------- reszta typów i układ ogólny ----------
 
     [Fact]
     public void OtherTypesAreLinesWithLabelAndValueInOneLine()
     {
-        var html = Html(Mail(ElementTypes.Announcement, [new("Tytuł", "Apel"), new("Autor", "Dyrekcja")]));
+        var html = Html(Mail(ElementTypes.Homework, [new("Przedmiot", "Historia"), new("Nauczyciel", "Nowak Jan")]));
 
         Assert.DoesNotContain("<table", html);
-        Assert.Contains("<span style=\"color:#777777;\">Tytuł:</span> Apel</div>", html);
-        Assert.Contains("<span style=\"color:#777777;\">Autor:</span> Dyrekcja</div>", html);
+        Assert.Contains("<span style=\"color:#777777;\">Przedmiot:</span> Historia</div>", html);
+        Assert.Contains("<span style=\"color:#777777;\">Nauczyciel:</span> Nowak Jan</div>", html);
     }
 
     [Fact]

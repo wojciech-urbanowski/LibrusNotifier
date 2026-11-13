@@ -8,8 +8,8 @@ using LibrusNotifier.Librus;
 namespace LibrusNotifier.Mail;
 
 // Układ HTML maila o elemencie. Maile są czytane głównie na telefonie, więc nic nie ma stałej szerokości ani kolumn:
-// zmiana w planie lekcji, wpis w terminarzu i wiadomość są kartami (ramka z kolorowym paskiem, jak wydarzenia w zestawieniach dziennych),
-// pozostałe typy to linie „etykieta: wartość”, które zawijają się na całą szerokość ekranu.
+// zmiana w planie lekcji, wpis w terminarzu, wiadomość i ogłoszenie są kartami (ramka z kolorowym paskiem, jak wydarzenia w zestawieniach
+// dziennych), pozostałe typy to linie „etykieta: wartość”, które zawijają się na całą szerokość ekranu.
 public static partial class MailTemplates
 {
     // Style są wpisane w elementy (klienci poczty różnie traktują <style>). Bez kolorów tła i tekstu treści, żeby
@@ -34,11 +34,13 @@ public static partial class MailTemplates
     private const string BodyStyle = "font-size:15px;line-height:1.5;" + WrapStyle;
     private const string GradeChipStyle = "display:inline-block;min-width:18px;padding:1px 6px;border:1px solid #999999;text-align:center;white-space:nowrap;";
 
-    // Kolory pasków kart: zmiana w planie ma kolor rodzaju zmiany (jak w zestawieniach), wpis w terminarzu jest szary, wiadomość niebieska.
+    // Kolory pasków kart: zmiana w planie ma kolor rodzaju zmiany (jak w zestawieniach), wpis w terminarzu jest szary,
+    // wiadomość i ogłoszenie (oba z treścią pod kartą) niebieskie.
     private static readonly string ScheduleBarColor = DigestPalette.Background(EventCategory.Other);
-    private const string MessageBarColor = "#bcd9f5";
+    private const string LetterBarColor = "#bcd9f5";
 
     private const string GradeLabel = "Ocena";
+    private const string BodyLabel = "Treść";
     private const string WeightLabel = "Waga";
     private const string SwapSuffix = " (zmiana)";
 
@@ -52,7 +54,7 @@ public static partial class MailTemplates
     /// <summary>
     /// Wersja HTML maila. Wszystkie wartości są kodowane, nic z Librusa nie trafia do HTML-a jako znacznik; jedyne znaczniki, jakie dodajemy
     /// w wartościach, to <c>&lt;strong&gt;</c> wokół dat „na teraz” (dziś, jutro, pierwszy dzień po wolnym; dat technicznych
-    /// (<see cref="DateModeFor"/>) to nie dotyczy) oraz formatowanie kart. Treść wiadomości ma całą szerokość ekranu, w akapitach.
+    /// (<see cref="DateModeFor"/>) to nie dotyczy) oraz formatowanie kart. Treść wiadomości i ogłoszenia ma całą szerokość ekranu, w akapitach.
     /// </summary>
     private static string BuildHtml(string title, string typeName, IReadOnlyList<Field> lead, IReadOnlyList<Field> fields, IReadOnlyList<Field> extra,
         string? note, string visibility, string detected, DateAnnotator dates, Func<string, string>? markStyle, GradeReport? report, string type)
@@ -69,6 +71,13 @@ public static partial class MailTemplates
             .AppendLine("</head>")
             .AppendLine($"<body style=\"{PageStyle}\">")
             .AppendLine($"<h1 style=\"{HeadingStyle}\">{Encode(typeName)}</h1>");
+
+        // Wiadomość pobiera treść osobno (szczegóły), a ogłoszenie ma ją wśród pól elementu; w obu ma być pod kartą, w akapitach.
+        if (type == ElementTypes.Announcement)
+        {
+            extra = [.. fields.Where(f => f.Label == BodyLabel), .. extra];
+            fields = [.. fields.Where(f => f.Label != BodyLabel)];
+        }
 
         var card = BuildCard(type, fields, dates);
         if (card is null)
@@ -122,15 +131,15 @@ public static partial class MailTemplates
     }
 
     /// <summary>
-    /// Szczegóły pod kartą lub liniami (np. treść wiadomości) na całą szerokość ekranu, w akapitach. Treść wiadomości nie ma etykiety,
-    /// inne szczegóły mają małą szarą etykietę nad tekstem.
+    /// Szczegóły pod kartą lub liniami (np. treść wiadomości lub ogłoszenia) na całą szerokość ekranu, w akapitach. Treść wiadomości
+    /// i ogłoszenia nie ma etykiety, inne szczegóły mają małą szarą etykietę nad tekstem.
     /// </summary>
     private static void AppendDetails(StringBuilder html, IReadOnlyList<Field> extra, DateAnnotator dates, string type)
     {
         foreach (var field in extra)
         {
             html.AppendLine($"<div style=\"margin:12px 0 0;{BlockWidthStyle}\">");
-            if (type != ElementTypes.Message) html.AppendLine($"<div style=\"font-size:12px;{MutedStyle}\">{Encode(field.Label)}</div>");
+            if (type is not (ElementTypes.Message or ElementTypes.Announcement)) html.AppendLine($"<div style=\"font-size:12px;{MutedStyle}\">{Encode(field.Label)}</div>");
             html.AppendLine($"<div style=\"margin:2px 0 0;{BodyStyle}\">");
             html.Append(Paragraphs(field.Value, dates, DateModeFor(type, field.Label)));
             html.AppendLine("</div>").AppendLine("</div>");
@@ -180,7 +189,8 @@ public static partial class MailTemplates
     {
         ElementTypes.TimetableChange => TimetableCard(fields, dates),
         ElementTypes.ScheduleEvent => ScheduleCard(fields, dates),
-        ElementTypes.Message => MessageCard(fields, dates),
+        ElementTypes.Message => LetterCard(ElementTypes.Message, "Temat", "Nadawca", fields, dates),
+        ElementTypes.Announcement => LetterCard(ElementTypes.Announcement, "Tytuł", "Autor", fields, dates),
         _ => null
     };
 
@@ -318,15 +328,14 @@ public static partial class MailTemplates
     }
 
     /// <summary>
-    /// Wiadomość: w karcie temat, nadawca i data nadania (tylko z dniem tygodnia, patrz <see cref="DateModeFor"/>); pod kartą treść
-    /// (<see cref="AppendDetails"/>). Pola spoza układu (np. „Załącznik”) są liniami na końcu karty.
+    /// Wiadomość lub ogłoszenie: w karcie temat (tytuł), nadawca (autor) i data (tylko z dniem tygodnia, patrz <see cref="DateModeFor"/>);
+    /// pod kartą treść (<see cref="AppendDetails"/>). Pola spoza układu (np. „Załącznik”) są liniami na końcu karty.
     /// </summary>
-    private static Card MessageCard(IReadOnlyList<Field> fields, DateAnnotator dates)
+    private static Card LetterCard(string type, string topicLabel, string senderLabel, IReadOnlyList<Field> fields, DateAnnotator dates)
     {
-        const string type = ElementTypes.Message;
         var f = new CardFields(fields);
-        var topic = f.Take("Temat");
-        var sender = f.Take("Nadawca");
+        var topic = f.Take(topicLabel);
+        var sender = f.Take(senderLabel);
         var date = f.Take("Data");
 
         var inner = new StringBuilder();
@@ -335,7 +344,7 @@ public static partial class MailTemplates
         if (date.Length > 0)
             inner.AppendLine($"<div style=\"margin:2px 0 0;font-size:12px;{MutedStyle}\">{dates.Html(date, DateModeFor(type, "Data"))}</div>");
         inner.Append(RestLines(f, dates, type));
-        return new Card(CardHtml(MessageBarColor, inner.ToString()), f.Technical);
+        return new Card(CardHtml(LetterBarColor, inner.ToString()), f.Technical);
     }
 
     /// <summary>„Selwesiuk Jolanta (Selwesiuk Jolanta) [Nauczyciel]” → „Selwesiuk Jolanta [Nauczyciel]”; inny tekst bez zmian.</summary>
