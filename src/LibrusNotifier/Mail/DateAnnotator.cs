@@ -12,6 +12,7 @@ namespace LibrusNotifier.Mail;
 /// (<c>rrrr-mm-dd</c>, opcjonalnie z godziną – opis jest wtedy za godziną). W wersji HTML data wraz z opisem jest pogrubiona,
 /// gdy dotyczy dnia dzisiejszego, jutrzejszego albo – gdy dziś jest wolne (weekend, święto, ferie) – pierwszego dnia szkolnego po wolnym.
 /// Daty czysto techniczne (np. kiedy nadano wiadomość) dostają tylko nazwę dnia tygodnia i nie są pogrubiane (<see cref="DateMode.WeekdayOnly"/>).
+/// W wersji HTML adresy WWW z treści są klikalnymi linkami (<see cref="TextLinks"/>); data w środku adresu nie jest opisywana.
 /// </summary>
 public sealed partial class DateAnnotator
 {
@@ -67,7 +68,7 @@ public sealed partial class DateAnnotator
         {
             for (var i = 0; i < segments.Count; i++)
             {
-                if (segments[i].IsDate) continue;
+                if (segments[i].IsDate || segments[i].Href is not null) continue;
                 var value = segments[i].Text;
                 var tailLength = value.Length - value.TrimEnd(' ', ',', ';', ':', '–', '-').Length;
                 var body = value[..^tailLength];
@@ -80,14 +81,18 @@ public sealed partial class DateAnnotator
         return string.Concat(segments.Select(s => s.Text));
     }
 
-    /// <summary>Tekst zakodowany do HTML-a (znaki nowej linii jako <c>&lt;br&gt;</c>), z pogrubionymi datami „na teraz”.</summary>
+    /// <summary>
+    /// Tekst zakodowany do HTML-a (znaki nowej linii jako <c>&lt;br&gt;</c>), z pogrubionymi datami „na teraz” i adresami WWW
+    /// jako klikalnymi linkami (<see cref="TextLinks"/>).
+    /// </summary>
     public string Html(string text, DateMode mode = DateMode.Relative)
     {
         var html = new StringBuilder();
         foreach (var segment in Split(text.Replace("\r\n", "\n").Replace('\r', '\n'), mode))
         {
             var encoded = WebUtility.HtmlEncode(segment.Text);
-            html.Append(segment.Emphasize ? $"<strong>{encoded}</strong>" : encoded);
+            if (segment.Href is not null) html.Append($"<a href=\"{WebUtility.HtmlEncode(segment.Href)}\">{encoded}</a>");
+            else html.Append(segment.Emphasize ? $"<strong>{encoded}</strong>" : encoded);
         }
         return html.ToString().Replace("\n", "<br>\n");
     }
@@ -111,9 +116,22 @@ public sealed partial class DateAnnotator
 
     public bool IsEmphasized(DateOnly date) => date == _today || date == _today.AddDays(1) || date == _firstSchoolDayAfterFree;
 
-    private readonly record struct Segment(string Text, bool IsDate, bool Emphasize);
+    /// <param name="Href">Docelowy adres, gdy fragment jest linkiem; adres w tekście nie jest datą, więc data w jego środku zostaje bez opisu.</param>
+    private readonly record struct Segment(string Text, bool IsDate, bool Emphasize, string? Href = null);
 
     private IEnumerable<Segment> Split(string text, DateMode mode)
+    {
+        var last = 0;
+        foreach (var link in TextLinks.Find(text))
+        {
+            foreach (var segment in SplitDates(text[last..link.Index], mode)) yield return segment;
+            yield return new Segment(text.Substring(link.Index, link.Length), false, false, link.Href);
+            last = link.Index + link.Length;
+        }
+        foreach (var segment in SplitDates(text[last..], mode)) yield return segment;
+    }
+
+    private IEnumerable<Segment> SplitDates(string text, DateMode mode)
     {
         var last = 0;
         foreach (Match match in DatePattern().Matches(text))

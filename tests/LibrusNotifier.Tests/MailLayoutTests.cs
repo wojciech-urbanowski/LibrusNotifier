@@ -195,6 +195,48 @@ public sealed class MailLayoutTests
     }
 
     [Fact]
+    public void LinkInMessageBodyIsClickableInHtmlAndPlainInText()
+    {
+        var mail = Mail(ElementTypes.Message, [new("Nadawca", "Anna"), new("Temat", "Konkurs")],
+            [new("Treść", "Dzień dobry,\nDo 20 listopada pracujemy nad pracą.\n\nPrzesyłam link do konkursu\n\nhttps://liblink.pl/zNYWOlww7S\n\nJeśli Państwo wyrażają zgodę, proszę o pracę do 2026-11-23.")]);
+        var html = Html(mail);
+
+        Assert.Contains("<p style=\"margin:0 0 10px;\"><a href=\"https://liblink.pl/zNYWOlww7S\">https://liblink.pl/zNYWOlww7S</a></p>", html);
+        Assert.Contains("proszę o pracę do 2026-11-23 (poniedziałek, za 11 dni).</p>", html); // reszta tekstu jest opisywana jak dotąd
+        Assert.Single(Regex.Matches(html, "<a href="));
+        Assert.Contains("https://liblink.pl/zNYWOlww7S", mail.Body);
+        Assert.DoesNotContain("<a ", mail.Body);
+    }
+
+    [Fact]
+    public void LinkWithDateInsideIsNotAnnotatedAndTextAroundItIs()
+    {
+        var html = Html(Mail(ElementTypes.Message, [new("Nadawca", "Anna"), new("Temat", "Wyjazd")],
+            [new("Treść", "Zapisy do 2026-11-13: https://szkola.pl/wyjazd/2026-11-13/zapisy.")]));
+
+        Assert.Contains("<strong>2026-11-13 (piątek, jutro)</strong>: <a href=\"https://szkola.pl/wyjazd/2026-11-13/zapisy\">https://szkola.pl/wyjazd/2026-11-13/zapisy</a>.</p>", html);
+    }
+
+    [Fact]
+    public void AddressWithAmpersandIsEncodedInHrefAndText()
+    {
+        var html = Html(Mail(ElementTypes.Message, [new("Nadawca", "Anna"), new("Temat", "Ankieta")],
+            [new("Treść", "https://ankieta.pl/?a=1&b=2")]));
+
+        Assert.Contains("<a href=\"https://ankieta.pl/?a=1&amp;b=2\">https://ankieta.pl/?a=1&amp;b=2</a>", html);
+    }
+
+    [Fact]
+    public void LinkInOtherTypeAndInCardLineIsClickableToo()
+    {
+        var announcement = Html(Mail(ElementTypes.Announcement, [new("Tytuł", "Apel"), new("Treść", "Szczegóły: www.szkola.pl/apel")]));
+        var scheduleEntry = Html(Mail(ElementTypes.ScheduleEvent, [new("Data", "2026-11-13"), new("Tytuł", "Wycieczka"), new("Opis", "Trasa: https://mapa.pl/trasa")]));
+
+        Assert.Contains("<a href=\"https://www.szkola.pl/apel\">www.szkola.pl/apel</a>", announcement);
+        Assert.Contains("Opis:</span> Trasa: <a href=\"https://mapa.pl/trasa\">https://mapa.pl/trasa</a></div>", scheduleEntry);
+    }
+
+    [Fact]
     public void AttachmentOfAMessageStaysInTheCardAsLine()
     {
         var html = Html(Mail(ElementTypes.Message, [new("Nadawca", "Anna"), new("Temat", "Zdjęcia"), new("Załącznik", "tak")]));
