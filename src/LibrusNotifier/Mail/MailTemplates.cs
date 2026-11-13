@@ -23,11 +23,11 @@ public static partial class MailTemplates
     private static readonly HashSet<string> TechnicalDateLabels = new(StringComparer.OrdinalIgnoreCase) { "Data dodania" };
 
     /// <summary>
-    /// Data nadania wiadomości jest czysto techniczna: dostaje tylko dzień tygodnia, bez „dziś/jutro” i bez pogrubienia
+    /// Data nadania wiadomości i dodania ogłoszenia jest czysto techniczna: dostaje tylko dzień tygodnia, bez „dziś/jutro” i bez pogrubienia
     /// (ważne jest, o czym wiadomość, a nie kiedy ją wysłano).
     /// </summary>
     private static DateAnnotator.DateMode DateModeFor(string type, string label) =>
-        type == ElementTypes.Message && label == "Data" ? DateAnnotator.DateMode.WeekdayOnly : DateAnnotator.DateMode.Relative;
+        type is ElementTypes.Message or ElementTypes.Announcement && label == "Data" ? DateAnnotator.DateMode.WeekdayOnly : DateAnnotator.DateMode.Relative;
 
     /// <summary>Tekst stopki każdego automatycznego maila, z numerem wersji aplikacji.</summary>
     public static string FooterText => $"Wiadomość wysłana automatycznie przez LibrusNotifier {App.Version}.";
