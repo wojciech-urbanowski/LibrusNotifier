@@ -107,15 +107,16 @@ public static class LibrusLists
             var date = Date(new DateOnly(year, month, day));
             foreach (var e in events)
             {
-                var description = e.Data.GetValueOrDefault("Opis", "");
-                var teacher = e.Data.GetValueOrDefault("Nauczyciel", "");
+                var data = ScheduleData(e.Data);
+                var description = data.FirstOrDefault(d => d.Label == "Opis").Value ?? "";
+                var teacher = data.FirstOrDefault(d => d.Label == "Nauczyciel").Value ?? "";
                 var number = e.Number?.ToString(Inv) ?? "";
                 var hour = e.Hour == "unknown" ? "" : e.Hour;
                 items.Add(new ObservedItem(ElementTypes.ScheduleEvent,
                     [date, e.Title, e.Subject, number, hour, description, teacher],
                     Fields([
                         ("Data", date), ("Godzina", hour), ("Nr lekcji", number), ("Przedmiot", e.Subject), ("Tytuł", e.Title),
-                        .. e.Data.Select(d => (d.Key, (string?)(d.Value == "unknown" ? "" : d.Value)))
+                        .. data.Select(d => (d.Label, (string?)d.Value))
                     ])));
             }
         }
@@ -174,6 +175,37 @@ public static class LibrusLists
     private static bool IsPresence(Attendance attendance) =>
         attendance.Symbol.Trim().Equals("ob", StringComparison.OrdinalIgnoreCase) ||
         attendance.Type.Trim().Equals("obecność", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Etykiety, które Librus stawia w dymku wpisu terminarza; inne „etykiety” po „Opis” to dalsze linie opisu.</summary>
+    private static readonly string[] ScheduleTitleLabels = ["Nauczyciel", "Opis", "Data dodania", "Sala", "Przedmiot", "Klasa"];
+
+    /// <summary>
+    /// Pola z dymku wpisu terminarza z odtworzonym wielolinijkowym opisem. LibrusApixNet dzieli dymek po <c>&lt;br&gt;</c> i każdą linię
+    /// traktuje jak parę „Etykieta: wartość”: linia bez dwukropka staje się kluczem z wartością „unknown”, a linia z dwukropkiem
+    /// osobnym polem. Takie wpisy po „Opis” (aż do następnej znanej etykiety, zwykle „Data dodania”) wracają do opisu jako kolejne linie.
+    /// Puste linie między akapitami giną już w bibliotece.
+    /// </summary>
+    internal static List<(string Label, string Value)> ScheduleData(IReadOnlyDictionary<string, string> data)
+    {
+        var result = new List<(string Label, string Value)>();
+        var inDescription = false;
+        foreach (var (key, value) in data)
+        {
+            var label = key.Trim();
+            var text = value == "unknown" ? "" : value.Trim();
+            var known = ScheduleTitleLabels.Contains(label, StringComparer.OrdinalIgnoreCase);
+            if (inDescription && !known)
+            {
+                var line = value == "unknown" ? label : $"{label}: {text}";
+                var last = result[^1];
+                result[^1] = (last.Label, last.Value.Length == 0 ? line : last.Value + "\n" + line);
+                continue;
+            }
+            inDescription = label.Equals("Opis", StringComparison.OrdinalIgnoreCase);
+            result.Add((label, text));
+        }
+        return result;
+    }
 
     /// <summary>Linie „Etykieta: wartość” z opisu, których nie ma wśród pól podstawowych (np. komentarz, „Dodał”).</summary>
     private static IEnumerable<(string, string?)> DescriptionFields(string description, string[] known)

@@ -89,6 +89,23 @@ public sealed class ElementTests
     }
 
     [Fact]
+    public void ScheduleMultilineDescriptionIsRebuiltFromTitleLines()
+    {
+        // Dymek jak w Librusie: opis z kilkoma liniami (bez dwukropka i z dwukropkiem) oraz pustą linią między punktami.
+        const string html = """
+            <div class="kalendarz-dzien"><div class="kalendarz-numer-dnia">27</div><table><tr><td
+              title="Nauczyciel: Michalik Aleksandra<br />Opis: Zadanie dodatkowe, do wyboru:<br />1. Napisz list do Świętego Mikołaja.<br /><br />2. Wykonaj własny komiks.<br />Uwaga: termin bez zmian<br />Data dodania: 2026-11-18 11:31:23"
+              onclick="otworz_w_nowym_oknie('/terminarz/szczegoly/99', 1)"><span>Język polski</span><br>zadanie domowe<br>Nr lekcji: 1</td></tr></table></div>
+            """;
+        var item = Assert.Single(LibrusLists.FromSchedule(2026, 11, Schedule.Parse(html)));
+        Assert.Contains(item.Fields, f => f is { Label: "Opis", Value: "Zadanie dodatkowe, do wyboru:\n1. Napisz list do Świętego Mikołaja.\n2. Wykonaj własny komiks.\nUwaga: termin bez zmian" });
+        Assert.Contains(item.Fields, f => f is { Label: "Nauczyciel", Value: "Michalik Aleksandra" });
+        Assert.Contains(item.Fields, f => f is { Label: "Data dodania", Value: "2026-11-18 11:31:23" });
+        Assert.DoesNotContain(item.Fields, f => f.Label.StartsWith("1.", StringComparison.Ordinal) || f.Label == "Uwaga");
+        Assert.Contains(item.KeyParts, p => p.EndsWith("2. Wykonaj własny komiks.\nUwaga: termin bez zmian", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void MondayOfWeek()
     {
         Assert.Equal(new DateOnly(2026, 11, 9), LibrusLists.MondayOf(new DateOnly(2026, 11, 12)));
