@@ -181,12 +181,30 @@ public sealed class DigestEventBuilderTests
 
         var room = Single(DigestElements.Make(ElementTypes.TimetableChange,
             [new Field("Zmiana", "zastępstwo"), new Field("Data", "2026-11-13"), new Field("Nr lekcji", "1"), new Field("Przedmiot", "Język polski"),
-                new Field("Nauczyciel (zmiana)", "A B -> C D"), new Field("Sala (zmiana)", "64 -> [brak]")]));
-        Assert.Equal("Zastępstwo: A B → C D\nSala: 64 → brak", room.Detail);
+                new Field("Nauczyciel (zmiana)", "A B -> C D"), new Field("Sala (zmiana)", "64 -> 70")]));
+        Assert.Equal("Zastępstwo: A B → C D\nSala: 64 → 70", room.Detail);
 
         var other = Single(DigestElements.Timetable("2026-11-13", "zamiana lekcji", "2", "Muzyka"));
         Assert.Equal(EventCategory.Other, other.Category);
         Assert.Equal("Zamiana lekcji", other.Label);
+    }
+
+    [Theory]
+    [InlineData("64 -> [brak]")]
+    [InlineData("64 ->")]
+    [InlineData("[brak]")]
+    public void RoomChangedToNoneIsLeftOutOfTheDigest(string roomSwap)
+    {
+        var substitution = Single(DigestElements.Make(ElementTypes.TimetableChange,
+            [new Field("Zmiana", "zastępstwo"), new Field("Data", "2026-11-13"), new Field("Nr lekcji", "1"), new Field("Przedmiot", "Język polski"),
+                new Field("Nauczyciel (zmiana)", "A B -> C D"), new Field("Sala (zmiana)", roomSwap)]));
+        Assert.Equal("Zastępstwo: A B → C D", substitution.Detail);
+
+        // Gdy to jedyna zmiana, zastępstwo zostaje bez szczegółów.
+        var onlyRoom = Single(DigestElements.Make(ElementTypes.TimetableChange,
+            [new Field("Zmiana", "zastępstwo"), new Field("Data", "2026-11-13"), new Field("Nr lekcji", "1"), new Field("Przedmiot", "Język polski"),
+                new Field("Sala (zmiana)", roomSwap)]));
+        Assert.Equal("", onlyRoom.Detail);
     }
 
     [Fact]
