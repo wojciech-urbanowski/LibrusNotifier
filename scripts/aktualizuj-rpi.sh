@@ -123,7 +123,8 @@ find_pids() {
     for pid in $(pgrep -f 'LibrusNotifier' || true); do
         [[ "$pid" == "$$" ]] && continue
         exe="$(readlink -f "/proc/$pid/exe" 2> /dev/null || true)"
-        cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null || true)"
+        # 2> przed <: błąd otwarcia pliku (proces zdążył zniknąć) zgłasza powłoka, więc przekierowanie stderr musi być pierwsze.
+        cmd="$(tr '\0' ' ' 2> /dev/null < "/proc/$pid/cmdline" || true)"
         if [[ "$exe" == "$APP_DIR/LibrusNotifier" || "$cmd" == *"$APP_DIR/LibrusNotifier.dll"* ]]; then
             echo "$pid"
         fi
