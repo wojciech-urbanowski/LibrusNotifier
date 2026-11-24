@@ -1,6 +1,7 @@
 using System.Text;
 using LibrusNotifier.Calendar;
 using LibrusNotifier.Data;
+using LibrusNotifier.Digest;
 using LibrusNotifier.Librus;
 using LibrusNotifier.Processing;
 using LibrusNotifier.Timing;
@@ -215,6 +216,7 @@ public static partial class MailTemplates
 
     private static void AppendField(StringBuilder body, Field field, DateAnnotator dates, string type)
     {
+        if (type == ElementTypes.TimetableChange && DigestEventBuilder.IsRoomRemoval(field.Label, field.Value)) return;
         var value = TechnicalDateLabels.Contains(field.Label) ? field.Value : dates.Plain(field.Value, DateModeFor(type, field.Label));
         if (value.Contains('\n'))
             body.AppendLine($"{field.Label}:").AppendLine(value.Replace("\r", "")).AppendLine();

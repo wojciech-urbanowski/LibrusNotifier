@@ -59,7 +59,42 @@ public sealed class MailLayoutTests
         Assert.Contains("Nauczyciel i sala: Koźmińska Aleksandra", html);
         Assert.Contains("Co się zmieniło", html);
         Assert.Contains("<s style=\"color:#777777;\">Gubernat Julia</s> -&gt; <strong>Koźmińska Aleksandra</strong>", html);
-        Assert.Contains("<s style=\"color:#777777;\">83a</s> -&gt; <strong>[brak]</strong>", html);
+        // Zmiana sali na „brak” nie jest pokazywana.
+        Assert.DoesNotContain("83a", html);
+        Assert.DoesNotContain("brak", html);
+    }
+
+    [Fact]
+    public void RoomChangedToAnotherRoomIsStillShown()
+    {
+        var fields = Substitution().Select(f => f.Label == "Sala (zmiana)" ? new Field(f.Label, "83a -> 64") : f).ToArray();
+
+        var mail = Mail(ElementTypes.TimetableChange, fields);
+
+        Assert.Contains("<s style=\"color:#777777;\">83a</s> -&gt; <strong>64</strong>", Html(mail));
+        Assert.Contains("Sala (zmiana): 83a -> 64", mail.Body);
+    }
+
+    [Fact]
+    public void RoomChangedToNoneIsLeftOutOfBothParts()
+    {
+        var mail = Mail(ElementTypes.TimetableChange, Substitution());
+
+        Assert.DoesNotContain("Sala", mail.Body);
+        Assert.DoesNotContain("brak", mail.Body);
+        Assert.Contains("Nauczyciel (zmiana): Gubernat Julia -> Koźmińska Aleksandra", mail.Body);
+        Assert.Contains("Co się zmieniło", Html(mail));
+    }
+
+    [Fact]
+    public void ChangesBlockIsOmittedWhenOnlyTheRoomWasRemoved()
+    {
+        var fields = Substitution().Where(f => f.Label is not ("Nauczyciel (zmiana)" or "Przedmiot (zmiana)")).ToArray();
+
+        var html = Html(Mail(ElementTypes.TimetableChange, fields));
+
+        Assert.DoesNotContain("Co się zmieniło", html);
+        Assert.DoesNotContain("Sala", html);
     }
 
     [Fact]

@@ -147,7 +147,8 @@ public static partial class DigestEventBuilder
         int? lesson = int.TryParse(Text(f, "Nr lekcji"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) ? number : null;
         var subjectSwap = Swap(Text(f, "Przedmiot (zmiana)"));
         var teacherSwap = Swap(Text(f, "Nauczyciel (zmiana)"));
-        var roomSwap = Swap(Text(f, "Sala (zmiana)"));
+        var room = Text(f, RoomSwapLabel);
+        var roomSwap = IsRoomRemoval(RoomSwapLabel, room) ? "" : Swap(room);
 
         var category = TimetableCategory(change);
         if (category == EventCategory.DayOff)
@@ -176,6 +177,21 @@ public static partial class DigestEventBuilder
         if (lower.Contains("odwołan", StringComparison.Ordinal)) return EventCategory.Cancelled;
         if (lower.Contains("zastępstw", StringComparison.Ordinal)) return EventCategory.Substitution;
         return EventCategory.Other;
+    }
+
+    /// <summary>Etykieta pola ze zmianą sali w planie lekcji.</summary>
+    internal const string RoomSwapLabel = "Sala (zmiana)";
+
+    /// <summary>
+    /// Czy pole to zmiana sali na „brak” (np. „69 -> [brak]”): zastępstwo często traci salę, a taka informacja nic nie wnosi,
+    /// więc nie trafia do zestawienia ani do maila o zmianie. Zmiana sali na inną jest pokazywana jak dotąd.
+    /// </summary>
+    internal static bool IsRoomRemoval(string label, string value)
+    {
+        if (label != RoomSwapLabel) return false;
+        var arrow = value.IndexOf("->", StringComparison.Ordinal);
+        var now = (arrow >= 0 ? value[(arrow + 2)..] : value).Trim();
+        return now.Length == 0 || string.Equals(now, "[brak]", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Librus zapisuje zmianę jako „stare -> nowe” (brak jako „[brak]”).</summary>
