@@ -243,7 +243,7 @@ public static partial class MailTemplates
     /// <summary>
     /// Zmiana w planie lekcji: data, plakietka z rodzajem zmiany (kolor jak w zestawieniach) i lekcja z godzinami, przedmiot,
     /// nauczyciel i sala, a pod kreską „Co się zmieniło”: każde pole „X (zmiana)” jako „stare -> nowe” ze skreślonym starym
-    /// (pole bez zmiany, np. ten sam przedmiot, i zmiana sali na „brak” pomijane).
+    /// (pole bez zmiany, np. ten sam przedmiot, i zmiana sali na „brak” pomijane; wtedy też etykieta to sam „Nauczyciel”).
     /// </summary>
     private static Card TimetableCard(IReadOnlyList<Field> fields, DateAnnotator dates)
     {
@@ -254,7 +254,8 @@ public static partial class MailTemplates
         var lesson = f.Take("Nr lekcji");
         var hours = f.Take("Godziny");
         var subject = f.Take("Przedmiot");
-        var teacherRoom = f.Take("Nauczyciel i sala");
+        var teacherRoom = f.Take(DigestEventBuilder.TeacherRoomLabel);
+        var teacherRoomLabel = DigestEventBuilder.TeacherRoomLabelFor(fields);
         var swaps = fields.Where(x => x.Label.EndsWith(SwapSuffix, StringComparison.Ordinal)).ToList();
         foreach (var swap in swaps) f.Take(swap.Label);
         var category = DigestEventBuilder.TimetableCategory(change);
@@ -265,7 +266,7 @@ public static partial class MailTemplates
         if (badge.Length + when.Length > 0) inner.AppendLine($"<div style=\"margin:4px 0;\">{badge}{when}</div>");
         if (subject.Length > 0) inner.AppendLine($"<div style=\"font-size:15px;\"><strong>{dates.Html(subject)}</strong></div>");
         if (teacherRoom.Length > 0)
-            inner.AppendLine($"<div style=\"font-size:12px;{MutedStyle}\">Nauczyciel i sala: {dates.Html(teacherRoom)}</div>");
+            inner.AppendLine($"<div style=\"font-size:12px;{MutedStyle}\">{teacherRoomLabel}: {dates.Html(teacherRoom)}</div>");
 
         var changes = string.Concat(swaps.Where(s => !DigestEventBuilder.IsRoomRemoval(s.Label, s.Value)).Select(s =>
             SwapBlock(s.Label[..^SwapSuffix.Length], s.Value, f.Peek(s.Label[..^SwapSuffix.Length]))));

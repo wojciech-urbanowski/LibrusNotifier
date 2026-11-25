@@ -142,7 +142,7 @@ public static partial class DigestEventBuilder
         if (!TryDate(f, "Data", out var date)) return null;
         var change = Text(f, "Zmiana");
         var subject = Text(f, "Przedmiot");
-        var teacherRoom = Text(f, "Nauczyciel i sala");
+        var teacherRoom = Text(f, TeacherRoomLabel);
         var hours = Text(f, "Godziny").Trim('–', '-', ' ');
         int? lesson = int.TryParse(Text(f, "Nr lekcji"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) ? number : null;
         var subjectSwap = Swap(Text(f, "Przedmiot (zmiana)"));
@@ -192,6 +192,23 @@ public static partial class DigestEventBuilder
         var arrow = value.IndexOf("->", StringComparison.Ordinal);
         var now = (arrow >= 0 ? value[(arrow + 2)..] : value).Trim();
         return now.Length == 0 || string.Equals(now, "[brak]", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Etykieta pola z nauczycielem i salą lekcji w planie lekcji.</summary>
+    internal const string TeacherRoomLabel = "Nauczyciel i sala";
+
+    /// <summary>
+    /// Etykieta, pod którą pole „Nauczyciel i sala” trafia do maila: gdy sala zmieniła się na „brak” (<see cref="IsRoomRemoval"/>),
+    /// pole zawiera samego nauczyciela, więc etykieta to „Nauczyciel”.
+    /// </summary>
+    internal static string TeacherRoomLabelFor(IEnumerable<Field> fields) =>
+        fields.Any(f => IsRoomRemoval(f.Label, f.Value)) ? "Nauczyciel" : TeacherRoomLabel;
+
+    /// <summary>Pola zmiany w planie lekcji z etykietą „Nauczyciel i sala” dopasowaną przez <see cref="TeacherRoomLabelFor"/>.</summary>
+    internal static IReadOnlyList<Field> WithTeacherRoomLabel(IReadOnlyList<Field> fields)
+    {
+        var label = TeacherRoomLabelFor(fields);
+        return label == TeacherRoomLabel ? fields : fields.Select(f => f.Label == TeacherRoomLabel ? f with { Label = label } : f).ToList();
     }
 
     /// <summary>Librus zapisuje zmianę jako „stare -> nowe” (brak jako „[brak]”).</summary>

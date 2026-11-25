@@ -56,7 +56,9 @@ public sealed class MailLayoutTests
         Assert.Contains("<strong>Lekcja 2</strong>", html);
         Assert.Contains("08:55 - 09:40", html);
         Assert.Contains("<strong>Język angielski</strong>", html);
-        Assert.Contains("Nauczyciel i sala: Koźmińska Aleksandra", html);
+        // Sala zmieniła się na „brak”, więc pole to sam nauczyciel.
+        Assert.Contains("Nauczyciel: Koźmińska Aleksandra", html);
+        Assert.DoesNotContain("Nauczyciel i sala", html);
         Assert.Contains("Co się zmieniło", html);
         Assert.Contains("<s style=\"color:#777777;\">Gubernat Julia</s> -&gt; <strong>Koźmińska Aleksandra</strong>", html);
         // Zmiana sali na „brak” nie jest pokazywana.
@@ -72,7 +74,9 @@ public sealed class MailLayoutTests
         var mail = Mail(ElementTypes.TimetableChange, fields);
 
         Assert.Contains("<s style=\"color:#777777;\">83a</s> -&gt; <strong>64</strong>", Html(mail));
+        Assert.Contains("Nauczyciel i sala: Koźmińska Aleksandra", Html(mail));
         Assert.Contains("Sala (zmiana): 83a -> 64", mail.Body);
+        Assert.Contains("Nauczyciel i sala: Koźmińska Aleksandra", mail.Body);
     }
 
     [Fact]
@@ -82,6 +86,8 @@ public sealed class MailLayoutTests
 
         Assert.DoesNotContain("Sala", mail.Body);
         Assert.DoesNotContain("brak", mail.Body);
+        Assert.Contains("Nauczyciel: Koźmińska Aleksandra", mail.Body);
+        Assert.DoesNotContain("Nauczyciel i sala", mail.Body);
         Assert.Contains("Nauczyciel (zmiana): Gubernat Julia -> Koźmińska Aleksandra", mail.Body);
         Assert.Contains("Co się zmieniło", Html(mail));
     }
