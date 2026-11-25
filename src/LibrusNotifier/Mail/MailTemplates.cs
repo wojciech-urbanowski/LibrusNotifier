@@ -94,7 +94,8 @@ public static partial class MailTemplates
 
         var body = new StringBuilder();
         body.AppendLine(typeName).AppendLine();
-        foreach (var field in fields) AppendField(body, field, dates, element.Type);
+        var textFields = element.Type == ElementTypes.TimetableChange ? DigestEventBuilder.WithTeacherRoomLabel(fields) : fields;
+        foreach (var field in textFields) AppendField(body, field, dates, element.Type);
         if (extra.Count > 0)
         {
             body.AppendLine();
